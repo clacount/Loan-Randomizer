@@ -11,29 +11,64 @@
     <header>
       <h1>Loan Randomizer</h1>
       <p>Assign incoming loans to loan officers using your custom balancing rules.</p>
+      <div class="intro-steps">
+        <strong>Quick steps</strong>
+        <p>1. Choose the PDF output folder. 2. Enter loan officers and loans. 3. Use Randomize Assignments to save the results PDF.</p>
+      </div>
     </header>
 
     <main class="grid">
-      <section class="card">
-        <div class="section-header">
-          <h2>Loan Officers</h2>
-          <button id="addOfficerBtn" type="button">Add Officer</button>
-        </div>
-        <p class="hint">Enter as many loan officers as you want.</p>
-        <div id="officerList" class="stack"></div>
-      </section>
-
-      <section class="card">
-        <div class="section-header">
-          <h2>Loans</h2>
-          <button id="addLoanBtn" type="button">Add Loan</button>
-        </div>
-        <p class="hint">Add loan names, IDs, or any labels you want to assign.</p>
-        <div id="loanList" class="stack"></div>
-      </section>
-
       <section class="card full">
-        <div class="toolbar">
+        <div id="outputStep" class="output-box output-box-priority" data-state="pending">
+          <div class="output-step-top">
+            <strong>Step 1: Choose PDF Output Folder</strong>
+            <div id="outputStepCompact" class="output-step-compact" hidden>
+              <div id="folderStatus" class="folder-status">No output folder selected.</div>
+              <button id="changeFolderBtn" class="change-folder-btn" type="button">Change Folder</button>
+            </div>
+          </div>
+          <div id="outputStepDetails" class="output-step-details">
+            <p class="hint">This must be selected before assignments can be randomized and saved.</p>
+            <div class="priority-action">
+              <button id="chooseFolderBtn" class="step-button" type="button">Choose Output Folder</button>
+            </div>
+            <div id="folderPrompt" class="folder-prompt">No output folder selected.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card full step-card">
+        <div class="step-heading">
+          <h2>Step 2: Enter Loan Officers and Loans</h2>
+          <p class="hint">Set up the people receiving loans and the loans that need to be assigned.</p>
+        </div>
+        <div class="step-grid">
+          <section class="step-panel">
+            <div class="section-header">
+              <h3>Loan Officers</h3>
+              <button id="addOfficerBtn" type="button">Add Officer</button>
+            </div>
+            <p class="hint">Enter as many loan officers as you want.</p>
+            <div id="officerList" class="stack"></div>
+          </section>
+
+          <section class="step-panel">
+            <div class="section-header">
+              <h3>Loans</h3>
+              <button id="addLoanBtn" type="button">Add Loan</button>
+            </div>
+            <p class="hint">Add loan names, IDs, or any labels you want to assign.</p>
+            <div id="loanList" class="stack"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="card full step-card">
+        <div class="step-heading">
+          <h2>Step 3: Run Assignments</h2>
+          <p class="hint">Randomize the assignments or load sample data to test the workflow.</p>
+        </div>
+        <div class="toolbar toolbar-centered">
           <button id="randomizeBtn" class="primary" type="button">Randomize Assignments</button>
           <button id="sampleBtn" type="button">Load Sample Data</button>
           <button id="clearBtn" type="button">Clear All</button>
@@ -62,6 +97,7 @@
     </main>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
