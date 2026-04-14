@@ -189,6 +189,10 @@ button:disabled {
   gap: 10px;
 }
 
+.officer-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
 .loan-row {
   grid-template-columns: minmax(0, 1fr) 180px 170px auto;
 }
@@ -234,6 +238,29 @@ input[type="text"] {
 .remove-btn {
   min-width: 42px;
   padding: 10px;
+}
+
+.vacation-btn {
+  min-width: 86px;
+  padding: 10px 12px;
+  background: #eef5ff;
+  border-color: #c9d9f4;
+  color: #2a4d84;
+}
+
+.vacation-btn[data-state="vacation"] {
+  background: #fff2df;
+  border-color: #efc27e;
+  color: #8a4f00;
+}
+
+.officer-on-vacation input[type="text"] {
+  background: #f4f6f8;
+  color: #7a8795;
+}
+
+.officer-on-vacation {
+  opacity: 0.82;
 }
 
 .rules {
@@ -395,6 +422,86 @@ input[type="text"] {
   font-size: 1rem;
 }
 
+.audit-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fcfdff;
+}
+
+.audit-card h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.audit-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f6f9fc;
+  border: 1px solid #e1e8f0;
+}
+
+.audit-summary-line {
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.audit-summary-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.audit-metric {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.audit-table-wrap {
+  overflow-x: auto;
+  margin-top: 10px;
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.audit-table th,
+.audit-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.audit-table th {
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.audit-table tr.winner td {
+  background: #eef8f3;
+  font-weight: 700;
+}
+
+.audit-table td:nth-child(2) {
+  font-weight: 600;
+}
+
 .badge {
   display: inline-block;
   padding: 4px 8px;
@@ -473,7 +580,15 @@ input[type="text"] {
     display: none;
   }
 
+  .officer-row {
+    grid-template-columns: 1fr;
+  }
+
   .loan-row {
     grid-template-columns: 1fr;
+  }
+
+  .audit-summary-metrics {
+    flex-direction: column;
   }
 }
