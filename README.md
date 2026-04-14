@@ -4,10 +4,13 @@ This is a simple local web app for assigning loans to loan officers using fair r
 
 ## How to use
 1. Download and unzip the project.
-2. Open `index.html` in any modern browser.
-3. Enter your loan officer names.
-4. Enter your loan names or IDs.
-5. Click **Randomize Assignments**.
+2. Open `index.html` in a current version of Microsoft Edge or Google Chrome.
+3. Click **Choose Output Folder** and pick the folder where audit PDFs should be saved.
+4. Enter your loan officer names.
+5. Enter your loan names or IDs.
+6. Click **Randomize Assignments**.
+
+Each run creates a PDF named like `Loan-Randomized-Results-2026-04-14-091530.pdf` in the selected folder. The PDF includes the timestamp, the total loan officers and loans entered, plus both **Assignments by Loan** and **Assignments by Officer** so managers can review every run.
 
 ## Rule behavior
 - You can use **any number of loan officers**.
@@ -29,5 +32,6 @@ This is a simple local web app for assigning loans to loan officers using fair r
 
 ## Notes
 - Loan officer names must be unique so totals display correctly.
+- Folder selection and direct PDF saving require a browser with the File System Access API.
 - No install is needed.
 - This runs fully in the browser and can be shared as files.
