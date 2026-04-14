@@ -52,7 +52,7 @@
                 <button id="addOfficerBtn" type="button">Add Officer</button>
               </div>
             </div>
-            <p class="hint">Enter as many loan officers as you want.</p>
+            <p class="hint">Enter as many loan officers as you want. Use the Vacation button to temporarily remove someone from assignments without deleting them.</p>
             <div id="officerList" class="stack"></div>
           </section>
 
@@ -61,7 +61,7 @@
               <h3>Loans</h3>
               <button id="addLoanBtn" type="button">Add Loan</button>
             </div>
-            <p class="hint">Add each loan with its name or ID, Amount Requested, and choose whether it is Auto, Personal, Credit Card, or Internet.</p>
+            <p class="hint">Add each loan with its name or ID, Amount Requested, and choose whether it is Auto, Personal, Credit Card, or Collateralized. Credit Card loans do not require a dollar amount.</p>
             <div class="loan-column-headers" aria-hidden="true">
               <span>Loan Name / ID</span>
               <span>Dollar Amount</span>
@@ -88,13 +88,14 @@
           <ul>
             <li>The number of loan officers can be any size.</li>
             <li>Each loan is assigned to one random officer.</li>
-            <li>Each loan must be marked as Auto, Personal, Credit Card, or Internet.</li>
+            <li>Each loan must be marked as Auto, Personal, Credit Card, or Collateralized.</li>
             <li>Each loan should include an Amount Requested so dollar totals can be balanced fairly.</li>
+            <li>Credit Card loans are tracked by unit count and type, but their dollar amounts do not count toward goal-dollar balancing.</li>
             <li>Each loan type is shuffled and balanced separately.</li>
-            <li>Within each type, assignments stay fair, and ties are broken by the lightest overall dollar load first, then by the lightest total loan count.</li>
+            <li>Within each type, the app compares a balanced fairness score using type mix, goal dollars, and loan count, then picks the officer that produces the most even team result.</li>
             <li>A CSV history file is kept in the selected output folder so the next run can continue balancing from prior dollar and type history.</li>
             <li>Loan officers missing from a single run stay in the CSV history so their totals return the next time the folder is loaded.</li>
-            <li>If one officer's dollar total gets far ahead, the app shifts priority to the lower-total officers until they reach at least 50% of that high total.</li>
+            <li>Fairness is measured against each officer's active sessions, so time off does not force a catch-up spike when someone returns.</li>
           </ul>
         </div>
         <div id="message" class="message"></div>
@@ -108,6 +109,11 @@
       <section class="card">
         <h2>Assignments by Officer</h2>
         <div id="officerAssignments" class="results empty">No assignments yet.</div>
+      </section>
+
+      <section class="card full">
+        <h2>Fairness Audit</h2>
+        <div id="fairnessAudit" class="results empty">No fairness audit yet.</div>
       </section>
     </main>
   </div>
