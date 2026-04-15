@@ -19,12 +19,11 @@ The app also keeps a CSV state file named `loan-randomizer-running-totals.csv` i
 - You can use **any number of loan officers**.
 - You must have **at least 1 loan officer**.
 - Each loan is assigned to **one** officer.
-- Each loan must have a type of **Auto**, **Personal**, **Credit Card**, or **Collateralized**.
+- Each loan must have a type of **Personal**, **Credit Card**, or **Collateralized**.
 - Each loan should include an **Amount Requested**.
 - **Credit Card** loans are tracked by unit count and type, but their dollar amounts do not count toward goal-dollar balancing.
 - The app groups loans by type and **shuffles each type separately**.
 - Then it assigns each type in **random fair rounds**:
-  - everyone gets one Auto before anyone gets a second Auto
   - everyone gets one Personal before anyone gets a second Personal
   - everyone gets one Credit Card before anyone gets a second Credit Card
   - everyone gets one Collateralized before anyone gets a second Collateralized
@@ -37,10 +36,9 @@ The app also keeps a CSV state file named `loan-randomizer-running-totals.csv` i
 ## Examples
 - **1 loan, 3 officers**: the single loan goes to one random officer.
 - **2 loans, 3 officers**: two different officers get one each.
-- **4 Auto loans, 4 officers**: each officer gets one Auto loan.
 - **5 Personal loans, 2 officers**: one officer gets 3 Personal and the other gets 2 Personal, at random.
-- **3 Auto, 1 Credit Card, 1 Collateralized with 3 officers**: each officer gets one Auto first, then the Credit Card and Collateralized loans go to two different officers because the app favors the lightest total load.
-- **3 Auto loans of different sizes**: the larger Auto requests are placed first so the dollar totals stay as even as possible while the type stays fair.
+- **3 Collateralized, 1 Credit Card, 1 Personal with 3 officers**: each officer gets one Collateralized first, then the Credit Card and Personal loans go to two different officers because the app favors the lightest total load.
+- **3 Collateralized loans of different sizes**: the larger Collateralized requests are placed first so the dollar totals stay as even as possible while the type stays fair.
 - **7 mixed loans, 3 officers**: each type stays balanced separately while the total workload is kept as even as possible.
 
 ## Notes

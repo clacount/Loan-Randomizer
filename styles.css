@@ -591,4 +591,29 @@ input[type="text"] {
   .audit-summary-metrics {
     flex-direction: column;
   }
+
+  .brand-header {
+    text-align: center;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+
+  .brand-logo {
+    max-width: 280px;
+    width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+  }
+
+  .brand-copy h1 {
+    margin: 0 0 8px;
+  }
+
+  .brand-copy p {
+    margin: 0;
+  }
+
 }

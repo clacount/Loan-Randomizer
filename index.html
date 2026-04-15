@@ -9,8 +9,13 @@
 <body>
   <div class="app">
     <header>
-      <h1>Loan Randomizer</h1>
-      <p>Assign incoming loans to loan officers using your custom balancing rules.</p>
+      <div class="brand-header">
+        <img src="midcoast-logo.png" alt="Midcoast Federal Credit Union logo" class="brand-logo" />
+        <div class="brand-copy">
+          <h1>Loan Randomizer</h1>
+          <p>Assign incoming loans to loan officers using your custom balancing rules.</p>
+        </div>
+      </div>
       <div class="intro-steps">
         <strong>Quick steps</strong>
         <p>1. Choose the output folder. 2. The app loads loan officers from the CSV history file if it exists. 3. Enter loans and randomize assignments.</p>
@@ -61,7 +66,7 @@
               <h3>Loans</h3>
               <button id="addLoanBtn" type="button">Add Loan</button>
             </div>
-            <p class="hint">Add each loan with its name or ID, Amount Requested, and choose whether it is Auto, Personal, Credit Card, or Collateralized. Credit Card loans do not require a dollar amount.</p>
+            <p class="hint">Add each loan with its name or ID, Amount Requested, and choose whether it's Collateralized, Credit Card, or Personal. Credit Card loans do not require a dollar amount.</p>
             <div class="loan-column-headers" aria-hidden="true">
               <span>Loan Name / ID</span>
               <span>Dollar Amount</span>
@@ -88,7 +93,7 @@
           <ul>
             <li>The number of loan officers can be any size.</li>
             <li>Each loan is assigned to one random officer.</li>
-            <li>Each loan must be marked as Auto, Personal, Credit Card, or Collateralized.</li>
+            <li>Each loan must be marked as Collateralized, Credit Card, or Personal.</li>
             <li>Each loan should include an Amount Requested so dollar totals can be balanced fairly.</li>
             <li>Credit Card loans are tracked by unit count and type, but their dollar amounts do not count toward goal-dollar balancing.</li>
             <li>Each loan type is shuffled and balanced separately.</li>

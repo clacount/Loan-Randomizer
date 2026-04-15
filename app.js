@@ -20,7 +20,7 @@ const officerAssignmentsEl = document.getElementById('officerAssignments');
 const fairnessAuditEl = document.getElementById('fairnessAudit');
 
 let outputDirectoryHandle = null;
-const LOAN_TYPES = ['Auto', 'Personal', 'Credit Card', 'Collateralized'];
+const LOAN_TYPES = ['Collateralized', 'Credit Card', 'Personal'];
 const RUNNING_TOTALS_FILE_NAME = 'loan-randomizer-running-totals.csv';
 
 function setOfficerVacationState(row, isOnVacation) {
@@ -398,7 +398,7 @@ function parseCsvLine(line) {
 
 function buildRunningTotalsCsv(runningTotals) {
   const rows = [
-    'officer,is_on_vacation,active_session_count,loan_count,total_amount_requested,auto_count,personal_count,credit_card_count,collateralized_count'
+    'officer,is_on_vacation,active_session_count,loan_count,total_amount_requested,personal_count,credit_card_count,collateralized_count'
   ];
 
   Object.entries(runningTotals.officers || {})
@@ -411,7 +411,6 @@ function buildRunningTotalsCsv(runningTotals) {
         normalizedStats.activeSessionCount,
         normalizedStats.loanCount,
         normalizedStats.totalAmountRequested,
-        normalizedStats.typeCounts.Auto,
         normalizedStats.typeCounts.Personal,
         normalizedStats.typeCounts['Credit Card'],
         normalizedStats.typeCounts.Collateralized
@@ -447,7 +446,6 @@ function parseRunningTotalsCsv(csvText) {
       loanCount: Number(row.loan_count),
       totalAmountRequested: Number(row.total_amount_requested),
       typeCounts: {
-        Auto: Number(row.auto_count),
         Personal: Number(row.personal_count),
         'Credit Card': Number(row.credit_card_count),
         Collateralized: Number(row.collateralized_count ?? row.internet_count)
@@ -673,9 +671,8 @@ function resetAppAfterEndOfMonth() {
   addOfficer('Loan Officer 1');
   addOfficer('Loan Officer 2');
   addOfficer('Loan Officer 3');
-  addOfficer('Loan Officer 4');
-  addLoan('Loan A', 'Auto', '15000');
-  addLoan('Loan B', 'Collateralized', '4000');
+  addLoan('Loan A', 'Collateralized', '15000');
+  addLoan('Loan B', 'Personal', '4000');
   updateFolderStatus();
 }
 
@@ -1300,8 +1297,8 @@ sampleBtn.addEventListener('click', () => {
 
   ['Alex', 'Brooke', 'Chris', 'Dana'].forEach(addOfficer);
   [
-    ['Loan 101', 'Auto', '25000'],
-    ['Loan 102', 'Auto', '18000'],
+    ['Loan 101', 'Collateralized', '25000'],
+    ['Loan 102', 'Personal', '18000'],
     ['Loan 103', 'Personal', '7500'],
     ['Loan 104', 'Credit Card', '3200'],
     ['Loan 105', 'Personal', '6800'],
@@ -1330,7 +1327,6 @@ clearBtn.addEventListener('click', () => {
 addOfficer('Loan Officer 1');
 addOfficer('Loan Officer 2');
 addOfficer('Loan Officer 3');
-addOfficer('Loan Officer 4');
-addLoan('Loan A', 'Auto', '15000');
-addLoan('Loan B', 'Collateralized', '4000');
+addLoan('Loan A', 'Collateralized', '15000');
+addLoan('Loan B', 'Personal', '4000');
 updateFolderStatus();
