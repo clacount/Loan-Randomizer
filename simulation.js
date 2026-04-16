@@ -6,9 +6,68 @@
   const DEFAULT_MIN_LOANS_PER_DAY = 8;
   const DEFAULT_MAX_LOANS_PER_DAY = 16;
 
+  const simulationModalEl = document.getElementById('simulationModal');
+  const simulationFormEl = document.getElementById('simulationForm');
+  const runSimulationBtn = document.getElementById('runSimulationBtn');
+  const closeSimulationModalBtn = document.getElementById('closeSimulationModalBtn');
+  const cancelSimulationBtn = document.getElementById('cancelSimulationBtn');
+  const simulationMonthInput = document.getElementById('simulationMonthInput');
+  const simulationBusinessDaysInput = document.getElementById('simulationBusinessDaysInput');
+  const simulationMinLoansInput = document.getElementById('simulationMinLoansInput');
+  const simulationMaxLoansInput = document.getElementById('simulationMaxLoansInput');
+  const simulationEomGoalInput = document.getElementById('simulationEomGoalInput');
+  const simulationModalMessageEl = document.getElementById('simulationModalMessage');
+
   function getCurrentMonthKey() {
     const date = new Date();
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  function setSimulationModalMessage(text = '', tone = 'warning') {
+    if (!simulationModalMessageEl) {
+      return;
+    }
+
+    simulationModalMessageEl.textContent = text;
+    simulationModalMessageEl.dataset.tone = text ? tone : '';
+  }
+
+  function populateSimulationDefaults() {
+    if (simulationMonthInput) {
+      simulationMonthInput.value = getCurrentMonthKey();
+    }
+    if (simulationBusinessDaysInput) {
+      simulationBusinessDaysInput.value = String(DEFAULT_BUSINESS_DAYS);
+    }
+    if (simulationMinLoansInput) {
+      simulationMinLoansInput.value = String(DEFAULT_MIN_LOANS_PER_DAY);
+    }
+    if (simulationMaxLoansInput) {
+      simulationMaxLoansInput.value = String(DEFAULT_MAX_LOANS_PER_DAY);
+    }
+    if (simulationEomGoalInput) {
+      simulationEomGoalInput.value = String(DEFAULT_EOM_GOAL_PER_OFFICER);
+    }
+  }
+
+  function openSimulationModal() {
+    if (!simulationModalEl) {
+      return;
+    }
+
+    populateSimulationDefaults();
+    setSimulationModalMessage('');
+    simulationModalEl.hidden = false;
+    simulationMonthInput?.focus();
+  }
+
+  function closeSimulationModal() {
+    if (!simulationModalEl) {
+      return;
+    }
+
+    simulationModalEl.hidden = true;
+    setSimulationModalMessage('');
   }
 
   function createSeededRandom(seed) {
@@ -277,39 +336,15 @@
     };
   }
 
-  function createSimulationConfigFromPrompts(officers) {
-    const monthLabel = window.prompt('Enter the simulation month in YYYY-MM format.', getCurrentMonthKey());
-    if (monthLabel === null) {
-      return null;
-    }
-
-    const businessDaysInput = window.prompt('How many business days should the simulation use?', String(DEFAULT_BUSINESS_DAYS));
-    if (businessDaysInput === null) {
-      return null;
-    }
-
-    const minLoansPerDayInput = window.prompt('Minimum number of simulated loans per business day?', String(DEFAULT_MIN_LOANS_PER_DAY));
-    if (minLoansPerDayInput === null) {
-      return null;
-    }
-
-    const maxLoansPerDayInput = window.prompt('Maximum number of simulated loans per business day?', String(DEFAULT_MAX_LOANS_PER_DAY));
-    if (maxLoansPerDayInput === null) {
-      return null;
-    }
-
-    const eomGoalInput = window.prompt('End-of-month goal dollars per officer?', String(DEFAULT_EOM_GOAL_PER_OFFICER));
-    if (eomGoalInput === null) {
-      return null;
-    }
-
-    const businessDays = Number.parseInt(businessDaysInput, 10);
-    const minLoansPerDay = Number.parseInt(minLoansPerDayInput, 10);
-    const maxLoansPerDay = Number.parseInt(maxLoansPerDayInput, 10);
-    const eomGoalPerOfficer = Number.parseFloat(eomGoalInput);
+  function getSimulationConfigFromModal(officers) {
+    const monthLabel = simulationMonthInput?.value?.trim() || '';
+    const businessDays = Number.parseInt(simulationBusinessDaysInput?.value || '', 10);
+    const minLoansPerDay = Number.parseInt(simulationMinLoansInput?.value || '', 10);
+    const maxLoansPerDay = Number.parseInt(simulationMaxLoansInput?.value || '', 10);
+    const eomGoalPerOfficer = Number.parseFloat(simulationEomGoalInput?.value || '');
     const seed = Date.now();
 
-    if (!/^\d{4}-\d{2}$/.test(monthLabel.trim())) {
+    if (!/^\d{4}-\d{2}$/.test(monthLabel)) {
       throw new Error('Enter the simulation month in YYYY-MM format.');
     }
 
@@ -330,7 +365,7 @@
     }
 
     return {
-      monthLabel: monthLabel.trim(),
+      monthLabel,
       officerNames: officers,
       businessDays,
       minLoansPerDay,
@@ -584,94 +619,95 @@
     }
   }
 
-  async function runFairnessSimulation() {
+  async function runFairnessSimulationFromConfig(config) {
+    const activeTypes = getActiveLoanTypeNames();
+    if (!activeTypes.length) {
+      throw new Error('At least one active loan type is required for the fairness simulation.');
+    }
+
+    const randomFn = createSeededRandom(config.seed);
+    const businessDates = generateBusinessDates(config.monthLabel, config.businessDays);
+    let runningTotals = cloneRunningTotals({ officers: {} });
+    let loanSequence = 1;
+    const loanHistoryEntries = [];
+
+    businessDates.forEach((date) => {
+      const loanCount = getRandomInteger(randomFn, config.minLoansPerDay, config.maxLoansPerDay);
+      const dayLoans = generateSimulatedLoansForDate(date, loanCount, activeTypes, randomFn, loanSequence);
+      loanSequence += dayLoans.length;
+
+      const dayResult = assignLoansWithRandom(config.officerNames, dayLoans, runningTotals, randomFn);
+      if (dayResult.error) {
+        throw new Error(dayResult.error);
+      }
+
+      dayResult.loanAssignments.forEach((entry) => {
+        loanHistoryEntries.push({
+          assignedDate: formatDateKey(date),
+          loan: entry.loan,
+          assignedOfficer: entry.officers[0]
+        });
+      });
+
+      runningTotals = buildUpdatedRunningTotals(config.officerNames, dayResult, runningTotals);
+    });
+
+    const officerStats = buildSimulationOfficerStats(config.officerNames, loanHistoryEntries, config.eomGoalPerOfficer);
+    const fairnessSummary = buildSimulationFairnessSummary(officerStats);
+
+    return {
+      monthLabel: config.monthLabel,
+      businessDays: config.businessDays,
+      eomGoalPerOfficer: config.eomGoalPerOfficer,
+      officers: config.officerNames,
+      totalLoans: loanHistoryEntries.length,
+      totalAmount: loanHistoryEntries.reduce((sum, entry) => sum + getGoalAmountForLoan(entry.loan), 0),
+      loanHistoryEntries,
+      officerStats,
+      fairnessSummary,
+      distributionCharts: buildSimulationDistributionCharts(officerStats)
+    };
+  }
+
+  async function handleSimulationSubmit(event) {
+    event.preventDefault();
+
     if (!outputDirectoryHandle) {
-      setMessage('Choose an output folder before running the fairness simulation.', 'warning');
+      setSimulationModalMessage('Choose an output folder before running the fairness simulation.', 'warning');
       return;
     }
 
     const officers = getOfficerValues();
-
     if (!officers.length) {
-      setMessage('Add at least one active loan officer before running the fairness simulation.', 'warning');
+      setSimulationModalMessage('Add at least one active loan officer before running the fairness simulation.', 'warning');
       return;
     }
 
     try {
-      const config = createSimulationConfigFromPrompts(officers);
-      if (!config) {
-        return;
-      }
-
-      const activeTypes = getActiveLoanTypeNames();
-      if (!activeTypes.length) {
-        throw new Error('At least one active loan type is required for the fairness simulation.');
-      }
-
-      const randomFn = createSeededRandom(config.seed);
-      const businessDates = generateBusinessDates(config.monthLabel, config.businessDays);
-      let runningTotals = cloneRunningTotals({ officers: {} });
-      let loanSequence = 1;
-      const loanHistoryEntries = [];
-
-      businessDates.forEach((date) => {
-        const loanCount = getRandomInteger(randomFn, config.minLoansPerDay, config.maxLoansPerDay);
-        const dayLoans = generateSimulatedLoansForDate(date, loanCount, activeTypes, randomFn, loanSequence);
-        loanSequence += dayLoans.length;
-
-        const dayResult = assignLoansWithRandom(config.officerNames, dayLoans, runningTotals, randomFn);
-        if (dayResult.error) {
-          throw new Error(dayResult.error);
-        }
-
-        dayResult.loanAssignments.forEach((entry) => {
-          loanHistoryEntries.push({
-            assignedDate: formatDateKey(date),
-            loan: entry.loan,
-            assignedOfficer: entry.officers[0]
-          });
-        });
-
-        runningTotals = buildUpdatedRunningTotals(config.officerNames, dayResult, runningTotals);
-      });
-
-      const officerStats = buildSimulationOfficerStats(config.officerNames, loanHistoryEntries, config.eomGoalPerOfficer);
-      const fairnessSummary = buildSimulationFairnessSummary(officerStats);
-      const simulationResult = {
-        monthLabel: config.monthLabel,
-        seed: config.seed,
-        businessDays: config.businessDays,
-        eomGoalPerOfficer: config.eomGoalPerOfficer,
-        officers: config.officerNames,
-        totalLoans: loanHistoryEntries.length,
-        totalAmount: loanHistoryEntries.reduce((sum, entry) => sum + getGoalAmountForLoan(entry.loan), 0),
-        loanHistoryEntries,
-        officerStats,
-        fairnessSummary,
-        distributionCharts: buildSimulationDistributionCharts(officerStats)
-      };
-
+      setSimulationModalMessage('');
+      const config = getSimulationConfigFromModal(officers);
+      const simulationResult = await runFairnessSimulationFromConfig(config);
       renderSimulationResults(simulationResult);
       const fileName = await saveSimulationPdf(simulationResult);
+      closeSimulationModal();
       setMessage(`Fairness simulation completed and saved to ${fileName}.`, 'success');
     } catch (error) {
-      setMessage(`The fairness simulation could not be completed: ${error.message}`, 'warning');
+      setSimulationModalMessage(error.message, 'warning');
     }
   }
 
-  function attachSimulationButton() {
-    const toolbar = document.querySelector('.toolbar.toolbar-centered');
-    if (!toolbar || document.getElementById('runSimulationBtn')) {
-      return;
+  runSimulationBtn?.addEventListener('click', openSimulationModal);
+  closeSimulationModalBtn?.addEventListener('click', closeSimulationModal);
+  cancelSimulationBtn?.addEventListener('click', closeSimulationModal);
+  simulationFormEl?.addEventListener('submit', handleSimulationSubmit);
+  simulationModalEl?.addEventListener('click', (event) => {
+    if (event.target === simulationModalEl) {
+      closeSimulationModal();
     }
-
-    const button = document.createElement('button');
-    button.id = 'runSimulationBtn';
-    button.type = 'button';
-    button.textContent = 'Run Fairness Simulation';
-    button.addEventListener('click', runFairnessSimulation);
-    toolbar.appendChild(button);
-  }
-
-  attachSimulationButton();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && simulationModalEl && !simulationModalEl.hidden) {
+      closeSimulationModal();
+    }
+  });
 })();
