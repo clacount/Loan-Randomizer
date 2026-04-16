@@ -699,6 +699,66 @@ input[type="date"] {
   background: #dff1e7;
 }
 
+.loan-type-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.loan-type-card-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.loan-type-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+#loanTypeList .loan-type-action-btn {
+  align-self: flex-start;
+}
+
+#loanTypeList .loan-type-action-btn.deactivate {
+  background: #fff4e5;
+  border-color: #efc27e;
+  color: #8a4f00;
+}
+
+#loanTypeList .loan-type-action-btn.deactivate:hover {
+  background: #ffe9cf;
+}
+
+#loanTypeList .loan-type-action-btn.activate {
+  background: #eef8f3;
+  border-color: #b9dec8;
+  color: #126c45;
+}
+
+#loanTypeList .loan-type-action-btn.activate:hover {
+  background: #dff1e7;
+}
+
+#loanTypeList .loan-type-remove-btn {
+  min-width: 42px;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 10px;
+  background: #fff1f0;
+  border-color: #efb2ac;
+  color: #b42318;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+#loanTypeList .loan-type-remove-btn:hover {
+  background: #ffe2df;
+}
+
 #loanTypeList .result-group {
   display: flex;
   flex-direction: column;

@@ -536,6 +536,25 @@ async function deactivateCustomLoanType(typeName) {
   await saveLoanTypes(allLoanTypes);
 }
 
+async function removeCustomLoanType(typeName) {
+  const normalizedTypeName = String(typeName || '').trim().toLowerCase();
+  const target = allLoanTypes.find((type) => type.name.toLowerCase() === normalizedTypeName);
+
+  if (!target) {
+    throw new Error(`Loan type ${typeName} was not found.`);
+  }
+
+  if (target.isBuiltIn) {
+    throw new Error(`Built-in loan type ${typeName} cannot be removed.`);
+  }
+
+  allLoanTypes = allLoanTypes.filter(
+    (type) => type.name.toLowerCase() !== normalizedTypeName
+  );
+
+  await saveLoanTypes(allLoanTypes);
+}
+
 function renderLoanTypes() {
   if (!loanTypeListEl) {
     return;
@@ -567,20 +586,27 @@ function renderLoanTypes() {
     const seasonalLabel = loanType.activeFrom || loanType.activeTo ? 'Seasonal' : 'Always available';
 
     wrapper.innerHTML = `
-      <h3>${escapeHtml(loanType.name)} <span class="badge">${escapeHtml(activeLabel)}</span></h3>
-      <div class="amount-summary">Availability: ${escapeHtml(seasonalLabel)}</div>
-      <div class="amount-summary">Start: ${escapeHtml(loanType.activeFrom || 'Always')}</div>
-      <div class="amount-summary">End: ${escapeHtml(loanType.activeTo || 'Always')}</div>
-      <div class="amount-summary">Amount optional: ${loanType.amountOptional ? 'Yes' : 'No'}</div>
+      <div class="loan-type-card-top">
+        <div class="loan-type-card-copy">
+          <h3>${escapeHtml(loanType.name)} <span class="badge">${escapeHtml(activeLabel)}</span></h3>
+          <div class="amount-summary">Availability: ${escapeHtml(seasonalLabel)}</div>
+          <div class="amount-summary">Start: ${escapeHtml(loanType.activeFrom || 'Always')}</div>
+          <div class="amount-summary">End: ${escapeHtml(loanType.activeTo || 'Always')}</div>
+          <div class="amount-summary">Amount optional: ${loanType.amountOptional ? 'Yes' : 'No'}</div>
+        </div>
+      </div>
     `;
 
     if (!loanType.isBuiltIn) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.textContent = isActive ? 'Deactivate' : 'Activate';
-      button.className = `loan-type-action-btn ${isActive ? 'deactivate' : 'activate'}`;
+      const actionRow = document.createElement('div');
+      actionRow.className = 'loan-type-action-row';
 
-      button.addEventListener('click', async () => {
+      const toggleButton = document.createElement('button');
+      toggleButton.type = 'button';
+      toggleButton.textContent = isActive ? 'Deactivate' : 'Activate';
+      toggleButton.className = `loan-type-action-btn ${isActive ? 'deactivate' : 'activate'}`;
+
+      toggleButton.addEventListener('click', async () => {
         try {
           if (isActive) {
             await deactivateCustomLoanType(loanType.name);
@@ -597,7 +623,31 @@ function renderLoanTypes() {
         }
       });
 
-      wrapper.appendChild(button);
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.textContent = '×';
+      removeButton.className = 'loan-type-remove-btn';
+      removeButton.setAttribute('aria-label', `Remove ${loanType.name}`);
+
+      removeButton.addEventListener('click', async () => {
+        const confirmed = window.confirm(`Remove ${loanType.name} from available loan types?`);
+        if (!confirmed) {
+          return;
+        }
+
+        try {
+          await removeCustomLoanType(loanType.name);
+          setMessage(`Loan type ${loanType.name} was removed.`, 'success');
+          renderLoanTypes();
+          refreshLoanTypeSelects();
+        } catch (error) {
+          setMessage(error.message, 'warning');
+        }
+      });
+
+      actionRow.appendChild(toggleButton);
+      actionRow.appendChild(removeButton);
+      wrapper.appendChild(actionRow);
     }
 
     loanTypeListEl.appendChild(wrapper);
