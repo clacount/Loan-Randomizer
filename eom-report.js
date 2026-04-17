@@ -262,10 +262,7 @@
           <h2>Reporting & Fairness Tools</h2>
           <p class="hint">Use this section to generate reports, review month-end data, and simulate fairness without cluttering the live assignment workflow.</p>
         </section>
-        <section id="simulationReportingCard" class="card reporting-card">
-          <h2>Fairness Simulation</h2>
-          <p class="hint">Run a full month simulation to validate fairness distribution without affecting production data.</p>
-        </section>
+        <section id="simulationReportingCard" class="card full reporting-card"></section>
         <section class="card reporting-card">
           <h2>End of Month Report</h2>
           <p class="hint">Generate the official month-end PDF and archive the current month’s tracking files.</p>
@@ -289,6 +286,10 @@
 
     const simulationReportingCard = document.getElementById('simulationReportingCard');
     if (simulationReportingCard) {
+      simulationReportingCard.innerHTML = `
+        <h2>Fairness Simulation</h2>
+        <p class="hint">Run a full month simulation to validate fairness distribution without affecting production data.</p>
+      `;
       simulationReportingCard.appendChild(simulationLaunchCard);
       simulationLaunchCard.classList.add('simulation-launch-card-reporting');
     }
