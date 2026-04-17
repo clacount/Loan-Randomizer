@@ -26,6 +26,15 @@
     }).format(date);
   }
 
+  function setReportingMessage(element, text = '', tone = 'warning') {
+    if (!element) {
+      return;
+    }
+
+    element.textContent = text;
+    element.dataset.tone = text ? tone : '';
+  }
+
   function normalizeHistoryEntries(loanHistory) {
     return Object.values(loanHistory?.loans || {})
       .map((entry) => normalizeLoanHistoryEntry(entry))
@@ -286,7 +295,7 @@
     return lines;
   }
 
-  async function savePdfFromLines(fileName, lines, report) {
+  async function savePdfFromLines(fileName, lines, report, options = {}) {
     if (!outputDirectoryHandle) {
       throw new Error('Choose an output folder before generating a report.');
     }
@@ -304,15 +313,25 @@
     await writable.write(pdfBlob);
     await writable.close();
 
-    return fileName;
+    let previewUrl = '';
+    if (options.openInNewTab) {
+      previewUrl = URL.createObjectURL(pdfBlob);
+      if (options.previewWindow && !options.previewWindow.closed) {
+        options.previewWindow.location.href = previewUrl;
+      } else {
+        window.open(previewUrl, '_blank');
+      }
+    }
+
+    return { fileName, previewUrl };
   }
 
   async function saveEomReportPdf(report) {
     return savePdfFromLines(buildEomPdfFileName(report.generatedAt), buildEomPdfLines(report), report);
   }
 
-  async function saveCustomReportPdf(report) {
-    return savePdfFromLines(buildCustomReportPdfFileName(report.generatedAt), buildCustomReportPdfLines(report), report);
+  async function saveCustomReportPdf(report, options = {}) {
+    return savePdfFromLines(buildCustomReportPdfFileName(report.generatedAt), buildCustomReportPdfLines(report), report, options);
   }
 
   async function buildEomReport() {
@@ -448,10 +467,10 @@
 
     try {
       const report = await buildEomReport();
-      const pdfFileName = await saveEomReportPdf(report);
+      const result = await saveEomReportPdf(report);
       const archiveFileName = await archiveRunningTotalsForEndOfMonth();
       resetAppAfterEndOfMonth();
-      setMessage(`End-of-month report saved to ${pdfFileName}. Loan tracking archived to ${archiveFileName}. Choose Output Folder to start the next month.`, 'success');
+      setMessage(`End-of-month report saved to ${result.fileName}. Loan tracking archived to ${archiveFileName}. Choose Output Folder to start the next month.`, 'success');
     } catch (error) {
       setMessage(`Could not complete End of Month: ${error.message}`, 'warning');
     }
@@ -460,14 +479,20 @@
   async function handleCustomReportSubmit(event) {
     event.preventDefault();
 
+    const customReportMessage = document.getElementById('customReportMessage');
+    setReportingMessage(customReportMessage, 'Generating custom report...', 'success');
+
     if (!outputDirectoryHandle) {
-      setMessage('Choose an output folder before generating a custom report.', 'warning');
+      const warningMessage = 'Choose an output folder before generating a custom report.';
+      setReportingMessage(customReportMessage, warningMessage, 'warning');
+      setMessage(warningMessage, 'warning');
       return;
     }
 
     const startDateInput = document.getElementById('customReportStartDate');
     const endDateInput = document.getElementById('customReportEndDate');
     const reportTypeInput = document.getElementById('customReportType');
+    const previewWindow = window.open('', '_blank');
 
     try {
       const report = await buildCustomReport({
@@ -475,10 +500,22 @@
         endDate: endDateInput?.value || '',
         reportType: reportTypeInput?.value || 'summary'
       });
-      const pdfFileName = await saveCustomReportPdf(report);
-      setMessage(`Custom report saved to ${pdfFileName}.`, 'success');
+      const result = await saveCustomReportPdf(report, {
+        openInNewTab: true,
+        previewWindow
+      });
+      const successMessage = result.previewUrl
+        ? `Custom report saved to ${result.fileName} and opened in a new tab.`
+        : `Custom report saved to ${result.fileName}.`;
+      setReportingMessage(customReportMessage, successMessage, 'success');
+      setMessage(successMessage, 'success');
     } catch (error) {
-      setMessage(`Could not generate custom report: ${error.message}`, 'warning');
+      if (previewWindow && !previewWindow.closed) {
+        previewWindow.close();
+      }
+      const errorMessage = `Could not generate custom report: ${error.message}`;
+      setReportingMessage(customReportMessage, errorMessage, 'warning');
+      setMessage(errorMessage, 'warning');
     }
   }
 
@@ -549,6 +586,7 @@
                 <option value="history">Full Loan History</option>
               </select>
             </label>
+            <div id="customReportMessage" class="message full-width"></div>
             <div class="reporting-actions full-width">
               <button id="customReportSubmitBtn" class="primary" type="submit">Generate Custom Report</button>
             </div>
