@@ -9,6 +9,16 @@
     return `Loan-Randomized-EOM-Report-${year}-${month}-${day}-${hours}${minutes}${seconds}.pdf`;
   }
 
+  function buildCustomReportPdfFileName(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `Loan-Randomized-Custom-Report-${year}-${month}-${day}-${hours}${minutes}${seconds}.pdf`;
+  }
+
   function getMonthLabel(date) {
     return new Intl.DateTimeFormat(undefined, {
       year: 'numeric',
@@ -42,6 +52,38 @@
           isOnVacation: normalizedStats.isOnVacation
         };
       });
+  }
+
+  function buildOfficerStatsFromHistory(entries) {
+    const officerMap = new Map();
+
+    entries.forEach((entry) => {
+      const officer = String(entry.assignedOfficer || '').trim() || 'Unassigned';
+      if (!officerMap.has(officer)) {
+        officerMap.set(officer, {
+          officer,
+          loanCount: 0,
+          totalAmountRequested: 0,
+          averageLoanAmount: 0,
+          typeCounts: {},
+          activeSessionCount: 0,
+          isOnVacation: false
+        });
+      }
+
+      const stats = officerMap.get(officer);
+      stats.loanCount += 1;
+      stats.totalAmountRequested += Number(entry.amountRequested) || 0;
+      stats.typeCounts[entry.type] = (stats.typeCounts[entry.type] || 0) + 1;
+    });
+
+    return Array.from(officerMap.values())
+      .map((stats) => ({
+        ...stats,
+        averageLoanAmount: stats.loanCount ? stats.totalAmountRequested / stats.loanCount : 0,
+        typeCounts: normalizeTypeCounts(stats.typeCounts)
+      }))
+      .sort((officerA, officerB) => officerA.officer.localeCompare(officerB.officer));
   }
 
   function buildFairnessSummary(officerStats) {
@@ -108,6 +150,35 @@
     ];
   }
 
+  function buildCustomDistributionCharts(officerStats, titlePrefix) {
+    const distribution = officerStats.map((entry) => ({
+      officer: entry.officer,
+      loanCount: entry.loanCount,
+      totalAmountRequested: entry.totalAmountRequested
+    }));
+
+    return [
+      {
+        title: `${titlePrefix} Loan Count Distribution`,
+        imageDataUrl: drawDonutChart({
+          title: `${titlePrefix} Loan Count Distribution`,
+          distribution,
+          field: 'loanCount',
+          valueFormatter: (value) => `${value} loans`
+        }).imageDataUrl
+      },
+      {
+        title: `${titlePrefix} Dollar Distribution`,
+        imageDataUrl: drawDonutChart({
+          title: `${titlePrefix} Dollar Distribution`,
+          distribution,
+          field: 'totalAmountRequested',
+          valueFormatter: (value) => formatCurrency(value)
+        }).imageDataUrl
+      }
+    ];
+  }
+
   function buildEomPdfLines(report) {
     const lines = [
       { text: 'End of Month Loan Randomizer Report', size: 18, gapAfter: 16 },
@@ -154,9 +225,70 @@
     return lines;
   }
 
-  async function saveEomReportPdf(report) {
+  function buildCustomReportPdfLines(report) {
+    const lines = [
+      { text: 'Loan Randomizer Custom Report', size: 18, gapAfter: 16 },
+      { text: `Report type: ${report.reportTypeLabel}`, size: 11, gapAfter: 4 },
+      { text: `Date range: ${report.startDateLabel} through ${report.endDateLabel}`, size: 11, gapAfter: 4 },
+      { text: `Generated: ${formatDisplayTimestamp(report.generatedAt)}`, size: 11, gapAfter: 4 },
+      { text: `Loan officers included: ${report.officerStats.length}`, size: 11, gapAfter: 4 },
+      { text: `Loans included: ${report.totalLoans}`, size: 11, gapAfter: 4 },
+      { text: `Total dollars included: ${formatCurrency(report.totalAmountRequested)}`, size: 11, gapAfter: 14 }
+    ];
+
+    if (report.includeSummary) {
+      lines.push({ text: 'Summary', size: 14, gapAfter: 10 });
+      lines.push({ text: `Average loans per officer: ${report.fairnessSummary.averageLoanCount.toFixed(2)}`, size: 11, gapAfter: 4 });
+      lines.push({ text: `Average dollars per officer: ${formatCurrency(report.fairnessSummary.averageDollarAmount)}`, size: 11, gapAfter: 4 });
+      lines.push({ text: `Fairness status: ${report.fairnessSummary.overallPass ? 'PASS' : 'REVIEW'}`, size: 11, gapAfter: 10 });
+    }
+
+    if (report.includeOfficerTotals) {
+      lines.push({ text: 'Officer Totals', size: 14, gapAfter: 10 });
+      report.officerStats.forEach((entry) => {
+        lines.push({
+          text: `${entry.officer} | Loans: ${entry.loanCount} | Dollars: ${formatCurrency(entry.totalAmountRequested)} | Avg loan: ${formatCurrency(entry.averageLoanAmount)} | ${formatTypeCounts(entry.typeCounts)}`,
+          size: 11,
+          gapAfter: 6
+        });
+      });
+    }
+
+    if (report.includeFairnessAudit) {
+      lines.push({ text: '', size: 11, gapAfter: 8 });
+      lines.push({ text: 'Fairness Audit', size: 14, gapAfter: 10 });
+      lines.push({ text: `Loan count variance: ${report.fairnessSummary.maxCountVariancePercent.toFixed(1)}%`, size: 11, gapAfter: 4 });
+      lines.push({ text: `Dollar variance: ${report.fairnessSummary.maxAmountVariancePercent.toFixed(1)}%`, size: 11, gapAfter: 4 });
+      lines.push({ text: `Highest loan count: ${report.fairnessSummary.highestLoanCount}`, size: 11, gapAfter: 4 });
+      lines.push({ text: `Lowest loan count: ${report.fairnessSummary.lowestLoanCount}`, size: 11, gapAfter: 4 });
+      lines.push({ text: `Highest dollar total: ${formatCurrency(report.fairnessSummary.highestDollarAmount)}`, size: 11, gapAfter: 4 });
+      lines.push({ text: `Lowest dollar total: ${formatCurrency(report.fairnessSummary.lowestDollarAmount)}`, size: 11, gapAfter: 8 });
+    }
+
+    if (report.includeLoanHistory) {
+      lines.push({ text: 'Loan History', size: 14, gapAfter: 10 });
+      report.loanHistoryEntries.forEach((entry) => {
+        const generatedAtLabel = entry.generatedAt ? new Date(entry.generatedAt).toLocaleString() : 'Unknown date';
+        lines.push({
+          text: `${generatedAtLabel} | ${entry.loanName} (${entry.type}, ${formatCurrency(entry.amountRequested)}) -> ${entry.assignedOfficer}`,
+          size: 10,
+          gapAfter: 4
+        });
+      });
+    }
+
+    if (report.distributionCharts.length) {
+      lines.push({ text: '', size: 11, gapAfter: 8 });
+      lines.push({ text: 'Distribution Snapshot', size: 14, gapAfter: 10 });
+      lines.push({ text: '__DISTRIBUTION_CHARTS__', size: 11, gapAfter: 0 });
+    }
+
+    return lines;
+  }
+
+  async function savePdfFromLines(fileName, lines, report) {
     if (!outputDirectoryHandle) {
-      throw new Error('Choose an output folder before ending the month.');
+      throw new Error('Choose an output folder before generating a report.');
     }
 
     if (!window.jspdf || !window.jspdf.jsPDF) {
@@ -164,16 +296,23 @@
     }
 
     const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'letter' });
-    writePdfLines(doc, buildEomPdfLines(report), report);
+    writePdfLines(doc, lines, report);
 
     const pdfBlob = doc.output('blob');
-    const fileName = buildEomPdfFileName(report.generatedAt);
     const fileHandle = await outputDirectoryHandle.getFileHandle(fileName, { create: true });
     const writable = await fileHandle.createWritable();
     await writable.write(pdfBlob);
     await writable.close();
 
     return fileName;
+  }
+
+  async function saveEomReportPdf(report) {
+    return savePdfFromLines(buildEomPdfFileName(report.generatedAt), buildEomPdfLines(report), report);
+  }
+
+  async function saveCustomReportPdf(report) {
+    return savePdfFromLines(buildCustomReportPdfFileName(report.generatedAt), buildCustomReportPdfLines(report), report);
   }
 
   async function buildEomReport() {
@@ -202,6 +341,100 @@
     };
   }
 
+  function parseDateInputToBounds(dateValue, isEndOfDay = false) {
+    if (!dateValue) {
+      return null;
+    }
+
+    const date = new Date(`${dateValue}T${isEndOfDay ? '23:59:59.999' : '00:00:00.000'}`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function getCustomReportTypeSettings(reportType) {
+    if (reportType === 'summary') {
+      return {
+        reportTypeLabel: 'Summary Report',
+        includeSummary: true,
+        includeOfficerTotals: true,
+        includeFairnessAudit: false,
+        includeLoanHistory: false
+      };
+    }
+
+    if (reportType === 'fairness') {
+      return {
+        reportTypeLabel: 'Fairness Audit Report',
+        includeSummary: true,
+        includeOfficerTotals: true,
+        includeFairnessAudit: true,
+        includeLoanHistory: false
+      };
+    }
+
+    if (reportType === 'history') {
+      return {
+        reportTypeLabel: 'Full Loan History Report',
+        includeSummary: true,
+        includeOfficerTotals: true,
+        includeFairnessAudit: true,
+        includeLoanHistory: true
+      };
+    }
+
+    return {
+      reportTypeLabel: 'Officer Totals Report',
+      includeSummary: true,
+      includeOfficerTotals: true,
+      includeFairnessAudit: false,
+      includeLoanHistory: false
+    };
+  }
+
+  async function buildCustomReport(config) {
+    const generatedAt = new Date();
+    const { loanHistory } = await loadLoanHistory();
+    const allEntries = normalizeHistoryEntries(loanHistory);
+    const startBound = parseDateInputToBounds(config.startDate, false);
+    const endBound = parseDateInputToBounds(config.endDate, true);
+
+    if (!startBound || !endBound) {
+      throw new Error('Select both a start date and an end date.');
+    }
+
+    if (startBound > endBound) {
+      throw new Error('Start date must be on or before the end date.');
+    }
+
+    const filteredEntries = allEntries.filter((entry) => {
+      const generatedAtDate = entry.generatedAt ? new Date(entry.generatedAt) : null;
+      if (!generatedAtDate || Number.isNaN(generatedAtDate.getTime())) {
+        return false;
+      }
+      return generatedAtDate >= startBound && generatedAtDate <= endBound;
+    });
+
+    if (!filteredEntries.length) {
+      throw new Error('No loan history was found for the selected date range.');
+    }
+
+    const officerStats = buildOfficerStatsFromHistory(filteredEntries);
+    const fairnessSummary = buildFairnessSummary(officerStats);
+    const reportSettings = getCustomReportTypeSettings(config.reportType);
+
+    return {
+      generatedAt,
+      startDateLabel: startBound.toLocaleDateString(),
+      endDateLabel: endBound.toLocaleDateString(),
+      officerStats,
+      loanHistoryEntries: filteredEntries,
+      totalLoans: filteredEntries.length,
+      totalAmountRequested: filteredEntries.reduce((sum, entry) => sum + (Number(entry.amountRequested) || 0), 0),
+      fairnessSummary,
+      distributionCharts: buildCustomDistributionCharts(officerStats, 'Custom Report'),
+      ...reportSettings
+    };
+  }
+
   async function handleEndOfMonthClick() {
     if (!outputDirectoryHandle) {
       setMessage('Choose an output folder before ending the month.', 'warning');
@@ -221,6 +454,31 @@
       setMessage(`End-of-month report saved to ${pdfFileName}. Loan tracking archived to ${archiveFileName}. Choose Output Folder to start the next month.`, 'success');
     } catch (error) {
       setMessage(`Could not complete End of Month: ${error.message}`, 'warning');
+    }
+  }
+
+  async function handleCustomReportSubmit(event) {
+    event.preventDefault();
+
+    if (!outputDirectoryHandle) {
+      setMessage('Choose an output folder before generating a custom report.', 'warning');
+      return;
+    }
+
+    const startDateInput = document.getElementById('customReportStartDate');
+    const endDateInput = document.getElementById('customReportEndDate');
+    const reportTypeInput = document.getElementById('customReportType');
+
+    try {
+      const report = await buildCustomReport({
+        startDate: startDateInput?.value || '',
+        endDate: endDateInput?.value || '',
+        reportType: reportTypeInput?.value || 'summary'
+      });
+      const pdfFileName = await saveCustomReportPdf(report);
+      setMessage(`Custom report saved to ${pdfFileName}.`, 'success');
+    } catch (error) {
+      setMessage(`Could not generate custom report: ${error.message}`, 'warning');
     }
   }
 
@@ -272,8 +530,29 @@
         </section>
         <section class="card reporting-card">
           <h2>Custom Date Range Reports</h2>
-          <p class="hint">This section is reserved for future reporting across any date range, officer, or loan type.</p>
-          <div class="report-placeholder">Coming next: archived month reports, date filters, and fairness-only export options.</div>
+          <p class="hint">Generate a report for any tracked date range in the current loan history file.</p>
+          <form id="customReportForm" class="custom-report-form">
+            <label>
+              <span>Start date</span>
+              <input id="customReportStartDate" type="date" required />
+            </label>
+            <label>
+              <span>End date</span>
+              <input id="customReportEndDate" type="date" required />
+            </label>
+            <label class="full-width">
+              <span>Report type</span>
+              <select id="customReportType" class="loan-type-select">
+                <option value="summary">Summary</option>
+                <option value="officer_totals">Officer Totals</option>
+                <option value="fairness">Fairness Audit</option>
+                <option value="history">Full Loan History</option>
+              </select>
+            </label>
+            <div class="reporting-actions full-width">
+              <button id="customReportSubmitBtn" class="primary" type="submit">Generate Custom Report</button>
+            </div>
+          </form>
         </section>
       </div>
     `;
@@ -297,6 +576,18 @@
     const operationsViewBtn = document.getElementById('operationsViewBtn');
     const reportingViewBtn = document.getElementById('reportingViewBtn');
     const reportingEndOfMonthBtn = document.getElementById('reportingEndOfMonthBtn');
+    const customReportForm = document.getElementById('customReportForm');
+    const customReportStartDate = document.getElementById('customReportStartDate');
+    const customReportEndDate = document.getElementById('customReportEndDate');
+
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    if (customReportStartDate) {
+      customReportStartDate.value = todayKey;
+    }
+    if (customReportEndDate) {
+      customReportEndDate.value = todayKey;
+    }
 
     function setActiveView(viewName) {
       const showingOperations = viewName === 'operations';
@@ -309,6 +600,7 @@
     operationsViewBtn?.addEventListener('click', () => setActiveView('operations'));
     reportingViewBtn?.addEventListener('click', () => setActiveView('reporting'));
     reportingEndOfMonthBtn?.addEventListener('click', () => boundEndOfMonthButton.click());
+    customReportForm?.addEventListener('submit', handleCustomReportSubmit);
   }
 
   const originalButton = document.getElementById('endOfMonthBtn');
