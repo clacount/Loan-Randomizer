@@ -830,9 +830,13 @@ input[type="month"] {
 }
 
 .modal-overlay[hidden] {
+  display: none !important;
+}
+
+.modal-overlay {
   position: fixed;
   inset: 0;
-  display: none !important;
+  display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
@@ -962,30 +966,6 @@ input[type="month"] {
   gap: 8px;
 }
 
-#loanTypeList .loan-type-action-btn {
-  align-self: flex-start;
-}
-
-#loanTypeList .loan-type-action-btn.deactivate {
-  background: #fff4e5;
-  border-color: #efc27e;
-  color: #8a4f00;
-}
-
-#loanTypeList .loan-type-action-btn.deactivate:hover {
-  background: #ffe9cf;
-}
-
-#loanTypeList .loan-type-action-btn.activate {
-  background: #eef8f3;
-  border-color: #b9dec8;
-  color: #126c45;
-}
-
-#loanTypeList .loan-type-action-btn.activate:hover {
-  background: #dff1e7;
-}
-
 #removeLoanHistoryBtn {
   background: #fff4e5;
   border-color: #efc27e;
@@ -996,12 +976,90 @@ input[type="month"] {
   background: #ffe9cf;
 }
 
+.view-switcher {
+  display: flex;
+  gap: 10px;
+  margin: 16px 0 6px;
+  justify-content: center;
+}
+
+.view-switcher-btn {
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  font-weight: 700;
+}
+
+.view-switcher-btn.active {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
+.workspace-view {
+  display: contents;
+}
+
+.workspace-view[hidden] {
+  display: none !important;
+}
+
+.reporting-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.reporting-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#simulationReportingCard {
+  background: linear-gradient(135deg, #eef8f3 0%, #dff1e7 100%);
+  border: 1px solid #b9dec8;
+  padding: 22px;
+}
+
+#simulationReportingCard .simulation-launch-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.reporting-hero-card {
+  background: linear-gradient(135deg, #eef8f3 0%, #dff1e7 100%);
+  border: 1px solid #b9dec8;
+}
+
+.reporting-actions {
+  margin-top: 8px;
+}
+
+.report-placeholder {
+  padding: 10px;
+  border-radius: 10px;
+  background: #f6f9fc;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.simulation-launch-card-reporting {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
 @media (max-width: 900px) {
   .grid {
     grid-template-columns: 1fr;
   }
 
-  .step-grid {
+  .step-grid,
+  .reporting-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1021,21 +1079,15 @@ input[type="month"] {
     display: none;
   }
 
-  .officer-row {
-    grid-template-columns: 1fr;
-  }
-
-  .loan-row {
+  .officer-row,
+  .loan-row,
+  .type-manager-form,
+  .simulation-form-grid {
     grid-template-columns: 1fr;
   }
 
   .audit-summary-metrics {
     flex-direction: column;
-  }
-
-  .type-manager-form,
-  .simulation-form-grid {
-    grid-template-columns: 1fr;
   }
 
   .modal-card {
