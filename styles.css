@@ -1017,6 +1017,18 @@ input[type="month"] {
   gap: 10px;
 }
 
+#simulationReportingCard {
+  background: linear-gradient(135deg, #eef8f3 0%, #dff1e7 100%);
+  border: 1px solid #b9dec8;
+}
+
+#simulationReportingCard .simulation-launch-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
 .reporting-hero-card {
   background: linear-gradient(135deg, #eef8f3 0%, #dff1e7 100%);
   border: 1px solid #b9dec8;
