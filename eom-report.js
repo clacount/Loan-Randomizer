@@ -190,7 +190,7 @@
 
   function buildEomPdfLines(report) {
     const lines = [
-      { text: 'End of Month Loan Randomizer Report', size: 18, gapAfter: 16 },
+      { text: 'End of Month Loan Assignment Report', size: 18, gapAfter: 16 },
       { text: `Month: ${report.monthLabel}`, size: 11, gapAfter: 4 },
       { text: `Generated: ${formatDisplayTimestamp(report.generatedAt)}`, size: 11, gapAfter: 4 },
       { text: `Loan officers tracked: ${report.officerStats.length}`, size: 11, gapAfter: 4 },
@@ -236,7 +236,7 @@
 
   function buildCustomReportPdfLines(report) {
     const lines = [
-      { text: 'Loan Randomizer Custom Report', size: 18, gapAfter: 16 },
+      { text: `Loan Assignment ${report.reportTypeLabel}`, size: 18, gapAfter: 16 },
       { text: `Report type: ${report.reportTypeLabel}`, size: 11, gapAfter: 4 },
       { text: `Date range: ${report.startDateLabel} through ${report.endDateLabel}`, size: 11, gapAfter: 4 },
       { text: `Generated: ${formatDisplayTimestamp(report.generatedAt)}`, size: 11, gapAfter: 4 },
@@ -327,8 +327,8 @@
     return { fileName, previewUrl };
   }
 
-  async function saveEomReportPdf(report) {
-    return savePdfFromLines(buildEomPdfFileName(report.generatedAt), buildEomPdfLines(report), report);
+  async function saveEomReportPdf(report, options = {}) {
+    return savePdfFromLines(buildEomPdfFileName(report.generatedAt), buildEomPdfLines(report), report, options);
   }
 
   async function saveCustomReportPdf(report, options = {}) {
@@ -466,13 +466,24 @@
       return;
     }
 
+    const previewWindow = window.open('', '_blank');
+
     try {
       const report = await buildEomReport();
-      const result = await saveEomReportPdf(report);
+      const result = await saveEomReportPdf(report, {
+        openInNewTab: true,
+        previewWindow
+      });
       const archiveFileName = await archiveRunningTotalsForEndOfMonth();
       await resetAppAfterEndOfMonth();
-      setMessage(`End-of-month report saved to ${result.fileName}. Loan tracking archived to ${archiveFileName}. Choose Output Folder to start the next month.`, 'success');
+      const successMessage = result.previewUrl
+        ? `End-of-month report saved to ${result.fileName}, opened in a new tab, and loan tracking archived to ${archiveFileName}. Choose Output Folder to start the next month.`
+        : `End-of-month report saved to ${result.fileName}. Loan tracking archived to ${archiveFileName}. Choose Output Folder to start the next month.`;
+      setMessage(successMessage, 'success');
     } catch (error) {
+      if (previewWindow && !previewWindow.closed) {
+        previewWindow.close();
+      }
       setMessage(`Could not complete End of Month: ${error.message}`, 'warning');
     }
   }

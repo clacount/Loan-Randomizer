@@ -1,4 +1,4 @@
-# Loan Randomizer
+# LendingFair
 
 ## Provided for internal testing and security review only.
 
@@ -14,7 +14,7 @@ This is a simple local web app for assigning loans to loan officers using fair r
 7. Enter each loan name or ID, its **Amount Requested**, and its **Loan Type**.
 8. Click **Run Fair Assignment**.
 
-Each run creates a PDF named like `Loan-Randomized-Results-2026-04-14-091530.pdf` in the active monthly `YYYY-MM` subfolder. The PDF includes the timestamp, the total loan officers and loans entered, plus both **Assignments by Loan** and **Assignments by Officer** so managers can review every run.
+Each run creates a PDF named like `Loan-Assignment-Report-2026-04-14-091530.pdf` in the active monthly `YYYY-MM` subfolder. The PDF includes the timestamp, the total loan officers and loans entered, plus both **Assignments by Loan** and **Assignments by Officer** so managers can review every run.
 
 The app also keeps a CSV state file named `loan-randomizer-running-totals.csv` in that same monthly subfolder. It stores running totals by officer, including loan count, dollar amount, and loan types already assigned, so the next run can keep balancing from prior history and restore the loan officer list when the app is reopened.
 
@@ -47,6 +47,7 @@ The app also keeps a CSV state file named `loan-randomizer-running-totals.csv` i
 - **7 mixed loans, 3 officers**: each type stays balanced separately while the total workload is kept as even as possible.
 
 ## Notes
+- To apply custom branding, add `custom_branding.png` at the repository root; the app uses it in the header and generated PDFs when present.
 - Loan officer names must be unique so totals display correctly.
 - Amount Requested must be a valid non-negative number for every entered loan.
 - Folder selection and direct PDF saving require a browser with the File System Access API.
