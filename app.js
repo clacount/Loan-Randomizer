@@ -36,7 +36,7 @@ const loanTypeSummaryStatsEl = document.getElementById('loanTypeSummaryStats');
 const distributionDetailsEl = document.getElementById('distributionDetails');
 const distributionChartsEl = document.getElementById('distributionCharts');
 
-const LOGO_PATH = './logo.png';
+const LOGO_PATH = './custom_branding.png';
 
 const logoEl = document.getElementById('logo');
 
@@ -1479,7 +1479,7 @@ function buildPdfFileName(date) {
   const minutes = padNumber(date.getMinutes());
   const seconds = padNumber(date.getSeconds());
 
-  return `Loan-Randomized-Results-${year}-${month}-${day}-${hours}${minutes}${seconds}.pdf`;
+  return `Loan-Assignment-Report-${year}-${month}-${day}-${hours}${minutes}${seconds}.pdf`;
 }
 
 function buildArchivedRunningTotalsFileName(date) {
@@ -2346,7 +2346,7 @@ function getAuditStatusLabel(entry, scoredOfficer, index) {
 
 function buildPdfLines(result, officers, loans, generatedAt) {
   const lines = [
-    { text: 'Loan Randomized Results', size: 18, gapAfter: 18 },
+    { text: 'Loan Assignment Report', size: 18, gapAfter: 18 },
     { text: `Generated: ${formatDisplayTimestamp(generatedAt)}`, size: 11, gapAfter: 6 },
     { text: `Loan officers entered: ${officers.length}`, size: 11, gapAfter: 4 },
     { text: `Loans entered: ${loans.length}`, size: 11, gapAfter: 14 },
