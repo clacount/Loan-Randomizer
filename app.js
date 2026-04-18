@@ -4,10 +4,13 @@ const addOfficerBtn = document.getElementById('addOfficerBtn');
 const importPriorMonthBtn = document.getElementById('importPriorMonthBtn');
 const addLoanBtn = document.getElementById('addLoanBtn');
 const chooseFolderBtn = document.getElementById('chooseFolderBtn');
+const launchDemoModeBtn = document.getElementById('launchDemoModeBtn');
 const changeFolderBtn = document.getElementById('changeFolderBtn');
+const quickLaunchDemoModeBtn = document.getElementById('quickLaunchDemoModeBtn');
+const endDemoModeBtn = document.getElementById('endDemoModeBtn');
+const clearDemoDataBtn = document.getElementById('clearDemoDataBtn');
 const endOfMonthBtn = document.getElementById('endOfMonthBtn');
 const randomizeBtn = document.getElementById('randomizeBtn');
-const sampleBtn = document.getElementById('sampleBtn');
 const clearBtn = document.getElementById('clearBtn');
 const removeLoanHistoryBtn = document.getElementById('removeLoanHistoryBtn');
 const messageEl = document.getElementById('message');
@@ -56,6 +59,14 @@ let isFolderPickerOpen = false;
 const RUNNING_TOTALS_FILE_NAME = 'loan-randomizer-running-totals.csv';
 const LOAN_HISTORY_FILE_NAME = 'loan-randomizer-loan-history.csv';
 const LOAN_TYPES_FILE_NAME = 'loan-types.json';
+const SIMULATION_HISTORY_FILE_NAME = 'simulation-history.csv';
+const DEMO_RUNNING_TOTALS_FILE_NAME = 'demo-running-totals.csv';
+const DEMO_LOAN_HISTORY_FILE_NAME = 'demo-loan-history.csv';
+const DEMO_LOAN_TYPES_FILE_NAME = 'demo-loan-types.json';
+const DEMO_SIMULATION_HISTORY_FILE_NAME = 'demo-simulation-history.csv';
+const DEMO_DATA_FOLDER_NAME = 'demo-data';
+
+let isDemoMode = false;
 
 const DEFAULT_LOAN_TYPES = [
   {
@@ -82,6 +93,153 @@ const DEFAULT_LOAN_TYPES = [
 ];
 
 let allLoanTypes = [...DEFAULT_LOAN_TYPES];
+
+function getSessionFileName(fileKind) {
+  const standardFileNames = {
+    runningTotals: RUNNING_TOTALS_FILE_NAME,
+    loanHistory: LOAN_HISTORY_FILE_NAME,
+    loanTypes: LOAN_TYPES_FILE_NAME,
+    simulationHistory: SIMULATION_HISTORY_FILE_NAME
+  };
+
+  if (!isDemoMode) {
+    return standardFileNames[fileKind];
+  }
+
+  const demoFileNames = {
+    runningTotals: DEMO_RUNNING_TOTALS_FILE_NAME,
+    loanHistory: DEMO_LOAN_HISTORY_FILE_NAME,
+    loanTypes: DEMO_LOAN_TYPES_FILE_NAME,
+    simulationHistory: DEMO_SIMULATION_HISTORY_FILE_NAME
+  };
+
+  return demoFileNames[fileKind];
+}
+
+async function getActiveDataDirectoryHandle() {
+  if (!outputDirectoryHandle) {
+    throw new Error('No output folder has been selected.');
+  }
+
+  if (!isDemoMode) {
+    return outputDirectoryHandle;
+  }
+
+  return outputDirectoryHandle.getDirectoryHandle(DEMO_DATA_FOLDER_NAME, { create: true });
+}
+
+function getSessionModeLabel() {
+  return isDemoMode ? 'Demo mode' : 'Production mode';
+}
+
+function createDemoRunningTotals() {
+  return {
+    officers: {
+      'Avery Stone': {
+        isOnVacation: false,
+        activeSessionCount: 12,
+        loanCount: 36,
+        totalAmountRequested: 486200,
+        typeCounts: {
+          Collateralized: 13,
+          'Credit Card': 9,
+          Personal: 14
+        }
+      },
+      'Jordan Blake': {
+        isOnVacation: false,
+        activeSessionCount: 12,
+        loanCount: 33,
+        totalAmountRequested: 451900,
+        typeCounts: {
+          Collateralized: 12,
+          'Credit Card': 10,
+          Personal: 11
+        }
+      },
+      'Casey Moore': {
+        isOnVacation: false,
+        activeSessionCount: 12,
+        loanCount: 34,
+        totalAmountRequested: 462300,
+        typeCounts: {
+          Collateralized: 11,
+          'Credit Card': 11,
+          Personal: 12
+        }
+      }
+    }
+  };
+}
+
+function createDemoLoanHistory() {
+  return {
+    loans: {
+      'dm-240301-001': normalizeLoanHistoryEntry({
+        loanName: 'DM-240301-001',
+        type: 'Collateralized',
+        amountRequested: 28000,
+        assignedOfficer: 'Avery Stone',
+        generatedAt: '2026-03-01T15:20:00.000Z'
+      }),
+      'dm-240301-002': normalizeLoanHistoryEntry({
+        loanName: 'DM-240301-002',
+        type: 'Credit Card',
+        amountRequested: 0,
+        assignedOfficer: 'Jordan Blake',
+        generatedAt: '2026-03-01T15:20:00.000Z'
+      }),
+      'dm-240302-003': normalizeLoanHistoryEntry({
+        loanName: 'DM-240302-003',
+        type: 'Personal',
+        amountRequested: 7200,
+        assignedOfficer: 'Casey Moore',
+        generatedAt: '2026-03-02T15:20:00.000Z'
+      }),
+      'dm-240303-004': normalizeLoanHistoryEntry({
+        loanName: 'DM-240303-004',
+        type: 'Collateralized',
+        amountRequested: 15800,
+        assignedOfficer: 'Jordan Blake',
+        generatedAt: '2026-03-03T15:20:00.000Z'
+      }),
+      'dm-240304-005': normalizeLoanHistoryEntry({
+        loanName: 'DM-240304-005',
+        type: 'Personal',
+        amountRequested: 5400,
+        assignedOfficer: 'Avery Stone',
+        generatedAt: '2026-03-04T15:20:00.000Z'
+      })
+    }
+  };
+}
+
+const DEFAULT_DEMO_LOAN_TYPES = [
+  ...DEFAULT_LOAN_TYPES,
+  {
+    name: 'Auto',
+    activeFrom: null,
+    activeTo: null,
+    isBuiltIn: false,
+    amountOptional: false
+  },
+  {
+    name: 'HELOC',
+    activeFrom: null,
+    activeTo: null,
+    isBuiltIn: false,
+    amountOptional: false
+  }
+];
+
+const DEFAULT_DEMO_SESSION_LOANS = [
+  { name: 'DEMO-LIVE-101', type: 'Collateralized', amount: '25000' },
+  { name: 'DEMO-LIVE-102', type: 'Personal', amount: '8200' },
+  { name: 'DEMO-LIVE-103', type: 'HELOC', amount: '46000' },
+  { name: 'DEMO-LIVE-104', type: 'Credit Card', amount: '' },
+  { name: 'DEMO-LIVE-105', type: 'Auto', amount: '17500' },
+  { name: 'DEMO-LIVE-106', type: 'Personal', amount: '6400' }
+];
 
 function getTodayKey() {
   const date = new Date();
@@ -168,6 +326,10 @@ function isAmountOptionalForType(typeName) {
   return Boolean(match?.amountOptional);
 }
 
+function getLoanTypeByName(typeName) {
+  return allLoanTypes.find((loanType) => loanType.name === typeName) || null;
+}
+
 function setOfficerVacationState(row, isOnVacation) {
   row.dataset.active = String(!isOnVacation);
 
@@ -196,20 +358,26 @@ function buildLoanTypeSelectOptions(typeSelect, selectedType = '') {
   typeSelect.innerHTML = '';
 
   const activeTypes = getActiveLoanTypeNames();
-  const optionsToShow = activeTypes.includes(selectedType) || !selectedType
-    ? activeTypes
-    : [...activeTypes, selectedType];
+  const optionsToShow = getAllLoanTypeNames();
 
   optionsToShow.forEach((typeOption) => {
+    const loanType = getLoanTypeByName(typeOption);
+    const isActive = isLoanTypeActive(loanType);
     const option = document.createElement('option');
     option.value = typeOption;
-    option.textContent = typeOption;
+    option.textContent = isActive ? typeOption : `${typeOption} (inactive)`;
+    option.disabled = !isActive;
     option.selected = typeOption === selectedType;
     typeSelect.appendChild(option);
   });
 
-  if (!typeSelect.value && optionsToShow.length) {
-    typeSelect.value = optionsToShow[0];
+  const selectedLoanType = getLoanTypeByName(typeSelect.value);
+  const selectedTypeIsActive = isLoanTypeActive(selectedLoanType);
+
+  if ((!typeSelect.value || !selectedTypeIsActive) && activeTypes.length) {
+    if (!selectedType || selectedTypeIsActive) {
+      [typeSelect.value] = activeTypes;
+    }
   }
 }
 
@@ -304,6 +472,32 @@ function addLoan(value = '', loanType = '', amount = '') {
   loanList.appendChild(createInputRow('loan', value, loanType, amount));
 }
 
+function loadDemoLoansIntoForm() {
+  loanList.innerHTML = '';
+
+  const activeTypes = getActiveLoanTypeNames();
+  const fallbackType = activeTypes[0] || 'Collateralized';
+
+  DEFAULT_DEMO_SESSION_LOANS.forEach((loan) => {
+    const preferredType = activeTypes.includes(loan.type) ? loan.type : fallbackType;
+    addLoan(loan.name, preferredType, loan.amount);
+  });
+}
+
+function removeLoansWithType(typeName) {
+  let removedCount = 0;
+
+  [...loanList.querySelectorAll('.loan-row')].forEach((row) => {
+    const typeSelect = row.querySelector('select');
+    if (typeSelect?.value === typeName) {
+      row.remove();
+      removedCount += 1;
+    }
+  });
+
+  return removedCount;
+}
+
 function getOfficerValues() {
   return [...officerList.querySelectorAll('.officer-row')]
     .filter((row) => row.dataset.active !== 'false')
@@ -355,6 +549,10 @@ function getLoanRowValidationError() {
       return `Loan ${loanName} must have a loan type selected.`;
     }
 
+    if (!isLoanTypeActive(getLoanTypeByName(typeSelect.value))) {
+      return `Loan ${loanName} is set to an inactive loan type (${typeSelect.value}). Reactivate that type or remove this loan.`;
+    }
+
     const normalizedLoanName = loanName.toLowerCase();
     if (seenLoanNames.has(normalizedLoanName)) {
       return `Loan ${loanName} is already entered on this screen.`;
@@ -396,11 +594,23 @@ function supportsFolderSelection() {
 
 function updateFolderStatus() {
   if (outputDirectoryHandle) {
-    folderStatusEl.textContent = `Selected folder: ${outputDirectoryHandle.name}`;
+    const folderSummary = isDemoMode
+      ? `Selected folder: ${outputDirectoryHandle.name} (using /${DEMO_DATA_FOLDER_NAME})`
+      : `Selected folder: ${outputDirectoryHandle.name}`;
+    folderStatusEl.textContent = folderSummary;
     folderStatusEl.dataset.state = 'ready';
     outputStepEl.dataset.state = 'complete';
     outputStepCompactEl.hidden = false;
     outputStepDetailsEl.hidden = true;
+    if (endDemoModeBtn) {
+      endDemoModeBtn.hidden = !isDemoMode;
+    }
+    if (quickLaunchDemoModeBtn) {
+      quickLaunchDemoModeBtn.hidden = isDemoMode;
+    }
+    if (clearDemoDataBtn) {
+      clearDemoDataBtn.hidden = !isDemoMode;
+    }
     randomizeBtn.disabled = false;
     randomizeBtn.dataset.state = 'ready';
     return;
@@ -422,6 +632,15 @@ function updateFolderStatus() {
   outputStepEl.dataset.state = 'pending';
   outputStepCompactEl.hidden = true;
   outputStepDetailsEl.hidden = false;
+  if (endDemoModeBtn) {
+    endDemoModeBtn.hidden = true;
+  }
+  if (quickLaunchDemoModeBtn) {
+    quickLaunchDemoModeBtn.hidden = true;
+  }
+  if (clearDemoDataBtn) {
+    clearDemoDataBtn.hidden = true;
+  }
   randomizeBtn.disabled = true;
   randomizeBtn.dataset.state = 'locked';
 }
@@ -448,7 +667,7 @@ async function loadLoanTypes() {
   }
 
   try {
-    const fileHandle = await outputDirectoryHandle.getFileHandle(LOAN_TYPES_FILE_NAME);
+    const fileHandle = await (await getActiveDataDirectoryHandle()).getFileHandle(getSessionFileName('loanTypes'));
     const file = await fileHandle.getFile();
     const fileText = await file.text();
 
@@ -467,7 +686,7 @@ async function loadLoanTypes() {
       allLoanTypes = [...DEFAULT_LOAN_TYPES];
       renderLoanTypes();
       refreshLoanTypeSelects();
-      throw new Error(`${LOAN_TYPES_FILE_NAME} contains invalid JSON. Falling back to default loan types.`);
+      throw new Error(`${getSessionFileName('loanTypes')} contains invalid JSON. Falling back to default loan types.`);
     }
 
     const parsedTypes = Array.isArray(parsed)
@@ -528,7 +747,7 @@ async function saveLoanTypes(loanTypes) {
     throw new Error('No output folder has been selected.');
   }
 
-  const fileHandle = await outputDirectoryHandle.getFileHandle(LOAN_TYPES_FILE_NAME, { create: true });
+  const fileHandle = await (await getActiveDataDirectoryHandle()).getFileHandle(getSessionFileName('loanTypes'), { create: true });
   const writable = await fileHandle.createWritable();
   await writable.write(JSON.stringify(loanTypes, null, 2));
   await writable.close();
@@ -887,7 +1106,13 @@ function renderLoanTypes() {
 
         try {
           await removeCustomLoanType(loanType.name);
-          setMessage(`Loan type ${loanType.name} was removed.`, 'success');
+          const removedLoanCount = removeLoansWithType(loanType.name);
+          setMessage(
+            removedLoanCount
+              ? `Loan type ${loanType.name} was removed, and ${removedLoanCount} loan row${removedLoanCount === 1 ? '' : 's'} using that type were deleted.`
+              : `Loan type ${loanType.name} was removed.`,
+            'success'
+          );
           renderLoanTypes();
           refreshLoanTypeSelects();
         } catch (error) {
@@ -933,7 +1158,78 @@ async function activateCustomLoanType(typeName) {
   await saveLoanTypes(allLoanTypes);
 }
 
-async function chooseOutputFolder() {
+async function ensureDemoDataSeeded() {
+  const dataDirectoryHandle = await getActiveDataDirectoryHandle();
+  const demoSeeds = [
+    {
+      fileName: getSessionFileName('loanTypes'),
+      content: JSON.stringify(DEFAULT_DEMO_LOAN_TYPES, null, 2)
+    },
+    {
+      fileName: getSessionFileName('runningTotals'),
+      content: buildRunningTotalsCsv(createDemoRunningTotals())
+    },
+    {
+      fileName: getSessionFileName('loanHistory'),
+      content: buildLoanHistoryCsv(createDemoLoanHistory())
+    },
+    {
+      fileName: getSessionFileName('simulationHistory'),
+      content: 'generated_at,month,business_days,total_loans,total_goal_amount,seed,officers\n'
+    }
+  ];
+
+  for (const demoSeed of demoSeeds) {
+    try {
+      await dataDirectoryHandle.getFileHandle(demoSeed.fileName);
+    } catch (error) {
+      if (error.name !== 'NotFoundError') {
+        throw error;
+      }
+      const fileHandle = await dataDirectoryHandle.getFileHandle(demoSeed.fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(demoSeed.content);
+      await writable.close();
+    }
+  }
+}
+
+async function activateSessionInDirectory(directoryHandle, sessionMode = 'production') {
+  outputDirectoryHandle = directoryHandle;
+  isDemoMode = sessionMode === 'demo';
+
+  if (isDemoMode) {
+    await ensureDemoDataSeeded();
+  }
+
+  await loadLoanTypes();
+  const { runningTotals, fileWasCreated } = await loadRunningTotals();
+  await loadLoanHistory();
+  const loadedOfficers = populateOfficersFromRunningTotals(runningTotals);
+  renderLoadedRunningTotals(runningTotals);
+
+  if (isDemoMode) {
+    loadDemoLoansIntoForm();
+  }
+
+  updateFolderStatus();
+
+  const demoLoanMessage = isDemoMode ? ` Loaded ${DEFAULT_DEMO_SESSION_LOANS.length} demo loans into Step 3.` : '';
+
+  if (loadedOfficers) {
+    setMessage(`${getSessionModeLabel()} is active in ${directoryHandle.name}. Loaded loan officer history from ${getSessionFileName('runningTotals')}.${demoLoanMessage}`, 'success');
+    return;
+  }
+
+  if (fileWasCreated) {
+    setMessage(`${getSessionModeLabel()} is active in ${directoryHandle.name}. Created ${getSessionFileName('runningTotals')}; enter loan officers to begin tracking history.${demoLoanMessage}`, 'success');
+    return;
+  }
+
+  setMessage(`${getSessionModeLabel()} is active in ${directoryHandle.name}. ${getSessionFileName('runningTotals')} is ready and waiting for loan officers.${demoLoanMessage}`, 'success');
+}
+
+async function chooseOutputFolder(sessionMode = 'production') {
   if (isFolderPickerOpen) {
     return;
   }
@@ -955,25 +1251,7 @@ async function chooseOutputFolder() {
       return;
     }
 
-    outputDirectoryHandle = directoryHandle;
-    await loadLoanTypes();
-    const { runningTotals, fileWasCreated } = await loadRunningTotals();
-    await loadLoanHistory();
-    const loadedOfficers = populateOfficersFromRunningTotals(runningTotals);
-    renderLoadedRunningTotals(runningTotals);
-    updateFolderStatus();
-
-    if (loadedOfficers) {
-      setMessage(`Output folder selected: ${directoryHandle.name}. Loaded loan officer history from ${RUNNING_TOTALS_FILE_NAME}.`, 'success');
-      return;
-    }
-
-    if (fileWasCreated) {
-      setMessage(`Output folder selected: ${directoryHandle.name}. Created ${RUNNING_TOTALS_FILE_NAME}; enter loan officers to begin tracking history.`, 'success');
-      return;
-    }
-
-    setMessage(`Output folder selected: ${directoryHandle.name}. ${RUNNING_TOTALS_FILE_NAME} is ready and waiting for loan officers.`, 'success');
+    await activateSessionInDirectory(directoryHandle, sessionMode);
   } catch (error) {
     if (error.name === 'AbortError') {
       return;
@@ -1186,6 +1464,78 @@ function parseLoanHistoryCsv(csvText) {
   return { loans };
 }
 
+function buildSimulationHistoryCsv(historyEntries) {
+  const rows = [
+    'generated_at,month,business_days,total_loans,total_goal_amount,seed,officers'
+  ];
+
+  historyEntries.forEach((entry) => {
+    rows.push([
+      entry.generatedAt,
+      entry.monthLabel,
+      entry.businessDays,
+      entry.totalLoans,
+      entry.totalGoalAmount,
+      entry.seed,
+      entry.officers
+    ].map(escapeCsvValue).join(','));
+  });
+
+  return `${rows.join('\n')}\n`;
+}
+
+function parseSimulationHistoryCsv(csvText) {
+  const trimmedText = csvText.trim();
+
+  if (!trimmedText) {
+    return [];
+  }
+
+  const [headerLine, ...dataLines] = trimmedText.split(/\r?\n/).filter(Boolean);
+  const headers = parseCsvLine(headerLine).map((header) => header.trim().toLowerCase());
+
+  return dataLines.map((line) => {
+    const values = parseCsvLine(line);
+    const row = Object.fromEntries(headers.map((header, index) => [header, values[index] ?? '']));
+
+    return {
+      generatedAt: String(row.generated_at ?? '').trim(),
+      monthLabel: String(row.month ?? '').trim(),
+      businessDays: Number(row.business_days) || 0,
+      totalLoans: Number(row.total_loans) || 0,
+      totalGoalAmount: Number(row.total_goal_amount) || 0,
+      seed: Number(row.seed) || 0,
+      officers: String(row.officers ?? '').trim()
+    };
+  });
+}
+
+async function appendSimulationHistoryEntry(entry) {
+  const simulationHistoryFileName = getSessionFileName('simulationHistory');
+  let existingEntries = [];
+
+  try {
+    const existingCsv = await readCsvFile(simulationHistoryFileName);
+    existingEntries = parseSimulationHistoryCsv(existingCsv);
+  } catch (error) {
+    if (error.name !== 'NotFoundError') {
+      throw error;
+    }
+  }
+
+  existingEntries.push({
+    generatedAt: entry.generatedAt,
+    monthLabel: entry.monthLabel,
+    businessDays: entry.businessDays,
+    totalLoans: entry.totalLoans,
+    totalGoalAmount: entry.totalGoalAmount,
+    seed: entry.seed,
+    officers: entry.officers
+  });
+
+  await writeCsvFile(simulationHistoryFileName, buildSimulationHistoryCsv(existingEntries));
+}
+
 function normalizeTypeCounts(typeCounts = {}) {
   const allTypeNames = getAllLoanTypeNames();
   const normalized = Object.fromEntries(allTypeNames.map((typeName) => [typeName, 0]));
@@ -1362,7 +1712,7 @@ async function loadRunningTotals() {
   }
 
   try {
-    const fileHandle = await outputDirectoryHandle.getFileHandle(RUNNING_TOTALS_FILE_NAME);
+    const fileHandle = await (await getActiveDataDirectoryHandle()).getFileHandle(getSessionFileName('runningTotals'));
     const file = await fileHandle.getFile();
     const fileText = await file.text();
 
@@ -1388,7 +1738,7 @@ async function loadLoanHistory() {
   }
 
   try {
-    const fileHandle = await outputDirectoryHandle.getFileHandle(LOAN_HISTORY_FILE_NAME);
+    const fileHandle = await (await getActiveDataDirectoryHandle()).getFileHandle(getSessionFileName('loanHistory'));
     const file = await fileHandle.getFile();
     const fileText = await file.text();
 
@@ -1458,7 +1808,7 @@ async function saveRunningTotals(runningTotals) {
     throw new Error('No output folder has been selected.');
   }
 
-  const fileHandle = await outputDirectoryHandle.getFileHandle(RUNNING_TOTALS_FILE_NAME, { create: true });
+  const fileHandle = await (await getActiveDataDirectoryHandle()).getFileHandle(getSessionFileName('runningTotals'), { create: true });
   const writable = await fileHandle.createWritable();
 
   await writable.write(buildRunningTotalsCsv(runningTotals));
@@ -1470,7 +1820,7 @@ async function saveLoanHistory(loanHistory) {
     throw new Error('No output folder has been selected.');
   }
 
-  const fileHandle = await outputDirectoryHandle.getFileHandle(LOAN_HISTORY_FILE_NAME, { create: true });
+  const fileHandle = await (await getActiveDataDirectoryHandle()).getFileHandle(getSessionFileName('loanHistory'), { create: true });
   const writable = await fileHandle.createWritable();
 
   await writable.write(buildLoanHistoryCsv(loanHistory));
@@ -1478,33 +1828,31 @@ async function saveLoanHistory(loanHistory) {
 }
 
 async function readCsvFile(fileName) {
-  if (!outputDirectoryHandle) {
-    throw new Error('No output folder has been selected.');
-  }
-
-  const fileHandle = await outputDirectoryHandle.getFileHandle(fileName);
+  const dataDirectoryHandle = await getActiveDataDirectoryHandle();
+  const fileHandle = await dataDirectoryHandle.getFileHandle(fileName);
   const file = await fileHandle.getFile();
   return file.text();
 }
 
 async function writeCsvFile(fileName, content) {
-  if (!outputDirectoryHandle) {
-    throw new Error('No output folder has been selected.');
-  }
-
-  const fileHandle = await outputDirectoryHandle.getFileHandle(fileName, { create: true });
+  const dataDirectoryHandle = await getActiveDataDirectoryHandle();
+  const fileHandle = await dataDirectoryHandle.getFileHandle(fileName, { create: true });
   const writable = await fileHandle.createWritable();
   await writable.write(content);
   await writable.close();
 }
 
 async function removeFile(fileName) {
-  if (!outputDirectoryHandle || typeof outputDirectoryHandle.removeEntry !== 'function') {
+  if (!outputDirectoryHandle) {
     return false;
   }
 
   try {
-    await outputDirectoryHandle.removeEntry(fileName);
+    const dataDirectoryHandle = await getActiveDataDirectoryHandle();
+    if (typeof dataDirectoryHandle.removeEntry !== 'function') {
+      return false;
+    }
+    await dataDirectoryHandle.removeEntry(fileName);
     return true;
   } catch (error) {
     if (error.name === 'NotFoundError') {
@@ -1513,6 +1861,32 @@ async function removeFile(fileName) {
 
     throw error;
   }
+}
+
+async function clearDemoDataFolder() {
+  if (!outputDirectoryHandle) {
+    throw new Error('Choose an output folder before clearing demo data.');
+  }
+
+  let demoDirectoryHandle;
+  try {
+    demoDirectoryHandle = await outputDirectoryHandle.getDirectoryHandle(DEMO_DATA_FOLDER_NAME);
+  } catch (error) {
+    if (error.name === 'NotFoundError') {
+      return 0;
+    }
+    throw error;
+  }
+
+  let removedEntries = 0;
+
+  // eslint-disable-next-line no-restricted-syntax
+  for await (const [entryName, entryHandle] of demoDirectoryHandle.entries()) {
+    await demoDirectoryHandle.removeEntry(entryName, { recursive: entryHandle.kind === 'directory' });
+    removedEntries += 1;
+  }
+
+  return removedEntries;
 }
 
 async function removeLoanFromHistory(loanName) {
@@ -1537,16 +1911,16 @@ async function archiveRunningTotalsForEndOfMonth() {
     throw new Error('Choose an output folder before ending the month.');
   }
 
-  const csvText = await readCsvFile(RUNNING_TOTALS_FILE_NAME);
+  const csvText = await readCsvFile(getSessionFileName('runningTotals'));
   const archiveFileName = buildArchivedRunningTotalsFileName(new Date());
   await writeCsvFile(archiveFileName, csvText);
-  await removeFile(RUNNING_TOTALS_FILE_NAME);
+  await removeFile(getSessionFileName('runningTotals'));
 
   try {
-    const loanHistoryText = await readCsvFile(LOAN_HISTORY_FILE_NAME);
+    const loanHistoryText = await readCsvFile(getSessionFileName('loanHistory'));
     const loanHistoryArchiveFileName = `loan-randomizer-loan-history-${new Date().getFullYear()}-${padNumber(new Date().getMonth() + 1)}.csv`;
     await writeCsvFile(loanHistoryArchiveFileName, loanHistoryText);
-    await removeFile(LOAN_HISTORY_FILE_NAME);
+    await removeFile(getSessionFileName('loanHistory'));
   } catch (error) {
     if (error.name !== 'NotFoundError') {
       throw error;
@@ -1556,8 +1930,9 @@ async function archiveRunningTotalsForEndOfMonth() {
   return archiveFileName;
 }
 
-function resetAppAfterEndOfMonth() {
+function resetToInitialScreen() {
   outputDirectoryHandle = null;
+  isDemoMode = false;
   allLoanTypes = [...DEFAULT_LOAN_TYPES];
   officerList.innerHTML = '';
   loanList.innerHTML = '';
@@ -1584,6 +1959,10 @@ function resetAppAfterEndOfMonth() {
   addLoan('Loan B', 'Personal', '4000');
   renderLoanTypes();
   updateFolderStatus();
+}
+
+function resetAppAfterEndOfMonth() {
+  resetToInitialScreen();
 }
 
 function getDistinctTypeCount(typeCounts) {
@@ -1883,10 +2262,11 @@ function assignLoans(officers, loans, runningTotals = { officers: {} }) {
   const cleanLoans = loans
     .map((loan) => ({
       name: loan.name.trim(),
-      type: activeLoanTypes.includes(loan.type) ? loan.type : activeLoanTypes[0],
+      type: loan.type,
       amountRequested: loan.amountRequested
     }))
-    .filter((loan) => loan.name);
+    .filter((loan) => loan.name)
+    .filter((loan) => activeLoanTypes.includes(loan.type));
 
   const loanCount = cleanLoans.length;
   const officerCount = cleanOfficers.length;
@@ -2157,7 +2537,32 @@ function renderLoadedRunningTotals(runningTotals) {
 
 function handleChooseFolderClick(event) {
   event?.preventDefault();
-  chooseOutputFolder();
+  chooseOutputFolder('production');
+}
+
+function handleLaunchDemoModeClick(event) {
+  event?.preventDefault();
+  chooseOutputFolder('demo');
+}
+
+async function handleQuickLaunchDemoModeClick(event) {
+  event?.preventDefault();
+
+  if (!outputDirectoryHandle) {
+    setMessage('Choose an output folder before launching demo mode.', 'warning');
+    return;
+  }
+
+  if (isDemoMode) {
+    setMessage('Demo mode is already active.', 'success');
+    return;
+  }
+
+  try {
+    await activateSessionInDirectory(outputDirectoryHandle, 'demo');
+  } catch (error) {
+    setMessage(`Could not launch demo mode: ${error.message}`, 'warning');
+  }
 }
 
 async function handleImportPriorMonthClick() {
@@ -2210,6 +2615,8 @@ importPriorMonthBtn.addEventListener('click', () => {
 });
 addLoanBtn.addEventListener('click', () => addLoan());
 chooseFolderBtn.addEventListener('click', handleChooseFolderClick);
+launchDemoModeBtn?.addEventListener('click', handleLaunchDemoModeClick);
+quickLaunchDemoModeBtn?.addEventListener('click', handleQuickLaunchDemoModeClick);
 changeFolderBtn.addEventListener('click', handleChooseFolderClick);
 
 
@@ -2255,6 +2662,40 @@ endOfMonthBtn?.addEventListener('click', async () => {
     setMessage(`Loan tracking archived to ${archiveFileName}. Choose Output Folder to start the next month.`, 'success');
   } catch (error) {
     setMessage(`Could not complete End of Month: ${error.message}`, 'warning');
+  }
+});
+
+endDemoModeBtn?.addEventListener('click', () => {
+  if (!isDemoMode) {
+    return;
+  }
+
+  const confirmed = window.confirm('End Demo Mode and reset the screen? This will not modify demo files.');
+  if (!confirmed) {
+    return;
+  }
+
+  resetToInitialScreen();
+  setMessage('Demo mode ended. The app has been reset to the initial screen.', 'success');
+});
+
+clearDemoDataBtn?.addEventListener('click', async () => {
+  if (!isDemoMode || !outputDirectoryHandle) {
+    setMessage('Launch Demo Mode before clearing demo data.', 'warning');
+    return;
+  }
+
+  const confirmed = window.confirm('Clear all files in /demo-data and end Demo Mode? This cannot be undone.');
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    const removedEntries = await clearDemoDataFolder();
+    resetToInitialScreen();
+    setMessage(`Cleared ${removedEntries} item${removedEntries === 1 ? '' : 's'} from /${DEMO_DATA_FOLDER_NAME}. Demo mode ended and the app was reset.`, 'success');
+  } catch (error) {
+    setMessage(`Could not clear demo data: ${error.message}`, 'warning');
   }
 });
 
@@ -2307,36 +2748,10 @@ randomizeBtn.addEventListener('click', async () => {
     const fileName = await saveResultPdf(result, officers, loans, generatedAt);
     await saveRunningTotals(result.updatedRunningTotals);
     await saveLoanHistory(buildUpdatedLoanHistory(result, generatedAt, loanHistory));
-    setMessage(`Assignments randomized and saved to ${fileName}. Officer history was updated in ${RUNNING_TOTALS_FILE_NAME}, and loan history was updated in ${LOAN_HISTORY_FILE_NAME}.`, 'success');
+    setMessage(`Assignments randomized and saved to ${fileName}. Officer history was updated in ${getSessionFileName('runningTotals')}, and loan history was updated in ${getSessionFileName('loanHistory')}.`, 'success');
   } catch (error) {
     setMessage(`Assignments were generated, but the files could not be fully saved: ${error.message}`, 'warning');
   }
-});
-
-sampleBtn.addEventListener('click', () => {
-  officerList.innerHTML = '';
-  loanList.innerHTML = '';
-
-  ['Alex', 'Brooke', 'Chris', 'Dana'].forEach(addOfficer);
-
-  const activeTypes = getActiveLoanTypeNames();
-  const firstType = activeTypes[0] || 'Collateralized';
-  const secondType = activeTypes[1] || 'Credit Card';
-  const thirdType = activeTypes[2] || 'Personal';
-
-  [
-    ['Loan 101', firstType, '25000'],
-    ['Loan 102', thirdType, '18000'],
-    ['Loan 103', thirdType, '7500'],
-    ['Loan 104', secondType, '3200'],
-    ['Loan 105', thirdType, '6800'],
-    ['Loan 106', secondType, '4100'],
-    ['Loan 107', firstType, '9200']
-  ].forEach(([loanName, loanType, loanAmount]) => addLoan(loanName, loanType, loanAmount));
-
-  const result = assignLoans(getOfficerValues(), getLoanValues());
-  renderResults(result);
-  renderDistributionCharts(result, getOfficerValues(), { officers: {} });
 });
 
 removeLoanHistoryBtn?.addEventListener('click', async () => {
@@ -2353,7 +2768,7 @@ removeLoanHistoryBtn?.addEventListener('click', async () => {
 
   try {
     await removeLoanFromHistory(loanName.trim());
-    setMessage(`Removed ${loanName.trim()} from ${LOAN_HISTORY_FILE_NAME}.`, 'success');
+    setMessage(`Removed ${loanName.trim()} from ${getSessionFileName('loanHistory')}.`, 'success');
   } catch (error) {
     setMessage(error.message, 'warning');
   }

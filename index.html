@@ -30,6 +30,9 @@
           <div id="outputStepCompact" class="output-step-compact" hidden>
             <div id="folderStatus" class="folder-status">No output folder selected.</div>
             <button id="changeFolderBtn" class="change-folder-btn" type="button">Change Folder</button>
+            <button id="quickLaunchDemoModeBtn" class="change-folder-btn" type="button" hidden>Launch Demo Mode</button>
+            <button id="endDemoModeBtn" class="end-month-btn" type="button" hidden>End Demo Mode</button>
+            <button id="clearDemoDataBtn" class="end-month-btn" type="button" hidden>Clear Demo Data</button>
             <button id="endOfMonthBtn" class="end-month-btn" type="button">End of Month</button>
           </div>
         </div>
@@ -37,6 +40,7 @@
           <p class="hint">This must be selected first so the app can load or create the loan officer history CSV, loan history CSV, and loan types JSON.</p>
           <div class="priority-action">
             <button id="chooseFolderBtn" class="step-button" type="button">Choose Output Folder</button>
+            <button id="launchDemoModeBtn" class="step-button step-button-secondary" type="button">Launch Demo Mode</button>
           </div>
           <div id="folderPrompt" class="folder-prompt">No output folder selected.</div>
         </div>
@@ -109,7 +113,6 @@
       </div>
       <div class="toolbar toolbar-centered">
         <button id="randomizeBtn" class="primary" type="button">Randomize Assignments</button>
-        <button id="sampleBtn" type="button">Load Sample Data</button>
         <button id="clearBtn" type="button">Clear All</button>
         <button id="removeLoanHistoryBtn" type="button">Remove Loan Number</button>
       </div>
