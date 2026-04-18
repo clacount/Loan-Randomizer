@@ -369,6 +369,9 @@ input[type="month"] {
 .priority-action {
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
   margin: 12px 0;
 }
 
@@ -386,6 +389,17 @@ input[type="month"] {
 
 .step-button:hover {
   background: #c46605;
+}
+
+.step-button-secondary {
+  background: #fff;
+  color: #8a4f00;
+  border-color: #efc27e;
+  box-shadow: none;
+}
+
+.step-button-secondary:hover {
+  background: #fff4e5;
 }
 
 .change-folder-btn {

@@ -246,10 +246,11 @@
     const cleanLoans = loans
       .map((loan) => ({
         name: loan.name.trim(),
-        type: activeLoanTypes.includes(loan.type) ? loan.type : activeLoanTypes[0],
+        type: loan.type,
         amountRequested: loan.amountRequested
       }))
-      .filter((loan) => loan.name);
+      .filter((loan) => loan.name)
+      .filter((loan) => activeLoanTypes.includes(loan.type));
 
     if (!cleanOfficers.length) {
       return { error: 'Please add at least one loan officer before running a fairness simulation.' };
@@ -878,12 +879,22 @@
       const simulationResult = await runFairnessSimulationFromConfig(config);
       renderSimulationResults(simulationResult);
       const { fileName, pdfBlob } = await saveSimulationPdf(simulationResult);
+      await appendSimulationHistoryEntry({
+        generatedAt: new Date().toISOString(),
+        monthLabel: simulationResult.monthLabel,
+        businessDays: simulationResult.businessDays,
+        totalLoans: simulationResult.totalLoans,
+        totalGoalAmount: simulationResult.totalAmount,
+        seed: config.seed,
+        officers: simulationResult.officers.join('|')
+      });
       const openedPreview = openSimulationPdfInNewTab(pdfBlob);
       closeSimulationModal();
+      const simulationHistoryFileName = getSessionFileName('simulationHistory');
       setMessage(
         openedPreview
-          ? `Fairness simulation completed, opened in a new tab, and saved to ${fileName}.`
-          : `Fairness simulation completed and saved to ${fileName}. (Pop-up blocked, so preview tab could not be opened.)`,
+          ? `Fairness simulation completed, opened in a new tab, and saved to ${fileName}. Simulation history was appended to ${simulationHistoryFileName}.`
+          : `Fairness simulation completed and saved to ${fileName}. Simulation history was appended to ${simulationHistoryFileName}. (Pop-up blocked, so preview tab could not be opened.)`,
         openedPreview ? 'success' : 'warning'
       );
     } catch (error) {
