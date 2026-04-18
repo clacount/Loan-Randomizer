@@ -34,10 +34,18 @@ const LOGO_PATH = './logo.png';
 
 const logoEl = document.getElementById('logo');
 
-if (LOGO_PATH) {
+if (logoEl && LOGO_PATH) {
+  logoEl.onerror = () => {
+    logoEl.style.display = 'none';
+    logoEl.removeAttribute('src');
+  };
+
+  logoEl.onload = () => {
+    logoEl.style.display = 'block';
+  };
+
   logoEl.src = LOGO_PATH;
-  logoEl.style.display = 'block';
-} else {
+} else if (logoEl) {
   logoEl.style.display = 'none';
 }
 
