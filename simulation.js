@@ -16,7 +16,11 @@
   const simulationMinLoansInput = document.getElementById('simulationMinLoansInput');
   const simulationMaxLoansInput = document.getElementById('simulationMaxLoansInput');
   const simulationEomGoalInput = document.getElementById('simulationEomGoalInput');
+  const simulationOfficerNameInput = document.getElementById('simulationOfficerNameInput');
+  const simulationAddOfficerBtn = document.getElementById('simulationAddOfficerBtn');
+  const simulationOfficerListEl = document.getElementById('simulationOfficerList');
   const simulationModalMessageEl = document.getElementById('simulationModalMessage');
+  const simulationOfficerState = [];
 
   function getCurrentMonthKey() {
     const date = new Date();
@@ -50,12 +54,107 @@
     }
   }
 
+  function getOfficerValuesForSimulationSeed() {
+    return [...officerList.querySelectorAll('.officer-row')]
+      .map((row) => row.querySelector('input')?.value?.trim() || '')
+      .filter(Boolean);
+  }
+
+  function renderSimulationOfficerList() {
+    if (!simulationOfficerListEl) {
+      return;
+    }
+
+    simulationOfficerListEl.innerHTML = '';
+
+    if (!simulationOfficerState.length) {
+      simulationOfficerListEl.className = 'stack results empty';
+      simulationOfficerListEl.textContent = 'No simulation officers yet. Add at least one officer to run the simulation.';
+      return;
+    }
+
+    simulationOfficerListEl.className = 'stack';
+
+    simulationOfficerState.forEach((entry, index) => {
+      const row = document.createElement('div');
+      row.className = 'simulation-officer-row';
+
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.value = entry.name;
+      nameInput.placeholder = 'Loan officer name';
+      nameInput.setAttribute('aria-label', 'Simulation loan officer name');
+      nameInput.addEventListener('input', () => {
+        simulationOfficerState[index].name = nameInput.value.trim();
+      });
+
+      const vacationInput = document.createElement('input');
+      vacationInput.type = 'number';
+      vacationInput.min = '0';
+      vacationInput.step = '1';
+      vacationInput.value = String(entry.vacationDays);
+      vacationInput.placeholder = '0';
+      vacationInput.setAttribute('aria-label', 'Vacation days in month');
+      vacationInput.addEventListener('input', () => {
+        const rawDays = Number.parseInt(vacationInput.value || '0', 10);
+        simulationOfficerState[index].vacationDays = Number.isFinite(rawDays) && rawDays >= 0 ? rawDays : 0;
+      });
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'remove-btn';
+      removeBtn.textContent = '×';
+      removeBtn.setAttribute('aria-label', `Remove ${entry.name || 'simulation officer'}`);
+      removeBtn.addEventListener('click', () => {
+        simulationOfficerState.splice(index, 1);
+        renderSimulationOfficerList();
+      });
+
+      row.appendChild(nameInput);
+      row.appendChild(vacationInput);
+      row.appendChild(removeBtn);
+      simulationOfficerListEl.appendChild(row);
+    });
+  }
+
+  function seedSimulationOfficerStateFromMainScreen() {
+    simulationOfficerState.length = 0;
+
+    getOfficerValuesForSimulationSeed().forEach((name) => {
+      simulationOfficerState.push({ name, vacationDays: 0 });
+    });
+
+    renderSimulationOfficerList();
+  }
+
+  function handleAddSimulationOfficer() {
+    const name = simulationOfficerNameInput?.value?.trim() || '';
+
+    if (!name) {
+      setSimulationModalMessage('Enter a simulation officer name before adding.', 'warning');
+      simulationOfficerNameInput?.focus();
+      return;
+    }
+
+    simulationOfficerState.push({ name, vacationDays: 0 });
+    if (simulationOfficerNameInput) {
+      simulationOfficerNameInput.value = '';
+    }
+
+    setSimulationModalMessage('');
+    renderSimulationOfficerList();
+  }
+
   function openSimulationModal() {
     if (!simulationModalEl) {
       return;
     }
 
     populateSimulationDefaults();
+    if (!simulationOfficerState.length) {
+      seedSimulationOfficerStateFromMainScreen();
+    }
+    renderSimulationOfficerList();
     setSimulationModalMessage('');
     simulationModalEl.hidden = false;
     simulationMonthInput?.focus();
@@ -342,13 +441,28 @@
     };
   }
 
-  function getSimulationConfigFromModal(officers) {
+  function getSimulationConfigFromModal() {
     const monthLabel = simulationMonthInput?.value?.trim() || '';
     const businessDays = Number.parseInt(simulationBusinessDaysInput?.value || '', 10);
     const minLoansPerDay = Number.parseInt(simulationMinLoansInput?.value || '', 10);
     const maxLoansPerDay = Number.parseInt(simulationMaxLoansInput?.value || '', 10);
     const eomGoalPerOfficer = Number.parseFloat(simulationEomGoalInput?.value || '');
     const seed = Date.now();
+    const simulationOfficers = simulationOfficerState
+      .map((entry) => ({
+        name: String(entry.name || '').trim(),
+        vacationDays: Number.isFinite(entry.vacationDays) ? Math.max(0, Math.trunc(entry.vacationDays)) : 0
+      }))
+      .filter((entry) => entry.name);
+
+    const seenNames = new Set();
+    simulationOfficers.forEach((entry) => {
+      const normalizedName = entry.name.toLowerCase();
+      if (seenNames.has(normalizedName)) {
+        throw new Error(`Simulation officer ${entry.name} is duplicated. Use each name once.`);
+      }
+      seenNames.add(normalizedName);
+    });
 
     if (!/^\d{4}-\d{2}$/.test(monthLabel)) {
       throw new Error('Enter the simulation month in YYYY-MM format.');
@@ -370,9 +484,21 @@
       throw new Error('End-of-month goal dollars must be zero or greater.');
     }
 
+    if (!simulationOfficers.length) {
+      throw new Error('Add at least one simulation officer before running the fairness simulation.');
+    }
+
+    const maxVacationDays = Math.max(0, businessDays - 1);
+    simulationOfficers.forEach((entry) => {
+      if (entry.vacationDays > maxVacationDays) {
+        throw new Error(`Vacation days for ${entry.name} cannot exceed ${maxVacationDays} for this setup.`);
+      }
+    });
+
     return {
       monthLabel,
-      officerNames: officers,
+      simulationOfficers,
+      officerNames: simulationOfficers.map((entry) => entry.name),
       businessDays,
       minLoansPerDay,
       maxLoansPerDay,
@@ -485,7 +611,8 @@
       { text: `Loan officers: ${simulationResult.officers.length}`, size: 11, gapAfter: 4 },
       { text: `Total simulated loans: ${simulationResult.totalLoans}`, size: 11, gapAfter: 4 },
       { text: `Total simulated goal dollars: ${formatCurrency(simulationResult.totalAmount)}`, size: 11, gapAfter: 4 },
-      { text: `End-of-month goal per officer: ${formatCurrency(simulationResult.eomGoalPerOfficer)}`, size: 11, gapAfter: 14 },
+      { text: `End-of-month goal per officer: ${formatCurrency(simulationResult.eomGoalPerOfficer)}`, size: 11, gapAfter: 4 },
+      { text: `Planned vacation days (all officers): ${simulationResult.simulationOfficers.reduce((sum, officer) => sum + officer.vacationDays, 0)}`, size: 11, gapAfter: 14 },
       { text: 'Fairness Summary', size: 14, gapAfter: 10 },
       { text: `Overall result: ${simulationResult.fairnessSummary.overallPass ? 'PASS' : 'REVIEW'}`, size: 12, gapAfter: 4 },
       { text: `Average loans per officer: ${simulationResult.fairnessSummary.averageLoanCount.toFixed(2)}`, size: 11, gapAfter: 4 },
@@ -495,9 +622,11 @@
       { text: 'Officer Monthly Totals', size: 14, gapAfter: 10 }
     ];
 
+    const simulationOfficerMap = Object.fromEntries(simulationResult.simulationOfficers.map((entry) => [entry.name, entry]));
+
     simulationResult.officerStats.forEach((entry) => {
       lines.push({
-        text: `${entry.officer} | Loans: ${entry.totalLoans} | Goal dollars: ${formatCurrency(entry.totalAmount)} | Avg loan: ${formatCurrency(entry.averageLoanAmount)} | Goal progress: ${entry.percentOfGoal.toFixed(1)}% | ${formatTypeCounts(entry.typeBreakdown)}`,
+        text: `${entry.officer} | Loans: ${entry.totalLoans} | Goal dollars: ${formatCurrency(entry.totalAmount)} | Avg loan: ${formatCurrency(entry.averageLoanAmount)} | Goal progress: ${entry.percentOfGoal.toFixed(1)}% | Vacation days: ${simulationOfficerMap[entry.officer]?.vacationDays || 0} | ${formatTypeCounts(entry.typeBreakdown)}`,
         size: 11,
         gapAfter: 6
       });
@@ -535,6 +664,26 @@
     return `Loan-Randomized-Results-Simulation-${monthLabel}-${year}-${month}-${day}-${hours}${minutes}${seconds}.pdf`;
   }
 
+  function openSimulationPdfInNewTab(pdfBlob) {
+    if (!pdfBlob || typeof window === 'undefined' || typeof window.URL?.createObjectURL !== 'function') {
+      return false;
+    }
+
+    const objectUrl = window.URL.createObjectURL(pdfBlob);
+    const previewTab = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+
+    if (!previewTab) {
+      window.URL.revokeObjectURL(objectUrl);
+      return false;
+    }
+
+    window.setTimeout(() => {
+      window.URL.revokeObjectURL(objectUrl);
+    }, 60 * 1000);
+
+    return true;
+  }
+
   async function saveSimulationPdf(simulationResult) {
     if (!outputDirectoryHandle) {
       throw new Error('Choose an output folder before running the fairness simulation.');
@@ -554,7 +703,7 @@
     await writable.write(pdfBlob);
     await writable.close();
 
-    return fileName;
+    return { fileName, pdfBlob };
   }
 
   function renderSimulationResults(simulationResult) {
@@ -574,8 +723,11 @@
       <div class="amount-summary">Business days: ${escapeHtml(String(simulationResult.businessDays))}</div>
       <div class="amount-summary">Loans simulated: ${escapeHtml(String(simulationResult.totalLoans))}</div>
       <div class="amount-summary">Goal dollars simulated: ${escapeHtml(formatCurrency(simulationResult.totalAmount))}</div>
+      <div class="amount-summary">Total planned vacation days: ${escapeHtml(String(simulationResult.simulationOfficers.reduce((sum, officer) => sum + officer.vacationDays, 0)))}</div>
     `;
     loanAssignmentsEl.appendChild(summaryCard);
+
+    const simulationOfficerMap = Object.fromEntries(simulationResult.simulationOfficers.map((entry) => [entry.name, entry]));
 
     simulationResult.officerStats.forEach((entry) => {
       const officerCard = document.createElement('div');
@@ -586,6 +738,7 @@
         <div class="amount-summary">Average simulated loan: ${escapeHtml(formatCurrency(entry.averageLoanAmount))}</div>
         <div class="amount-summary">Percent to EOM goal: ${escapeHtml(entry.percentOfGoal.toFixed(1))}%</div>
         <div class="amount-summary">Type mix: ${escapeHtml(formatTypeCounts(entry.typeBreakdown))}</div>
+        <div class="amount-summary">Vacation days configured: ${escapeHtml(String(simulationOfficerMap[entry.officer]?.vacationDays || 0))}</div>
       `;
       officerAssignmentsEl.appendChild(officerCard);
     });
@@ -625,6 +778,38 @@
     }
   }
 
+  function buildOfficerVacationCalendar(simulationOfficers, businessDates, randomFn) {
+    const businessDateKeys = businessDates.map((date) => formatDateKey(date));
+    const vacationByOfficer = {};
+
+    simulationOfficers.forEach((entry) => {
+      const availableDates = [...businessDateKeys];
+      const selected = new Set();
+      const daysToSchedule = Math.min(entry.vacationDays, businessDateKeys.length);
+
+      for (let dayIndex = 0; dayIndex < daysToSchedule; dayIndex += 1) {
+        if (!availableDates.length) {
+          break;
+        }
+
+        const randomIndex = Math.floor(randomFn() * availableDates.length);
+        const [chosenDate] = availableDates.splice(randomIndex, 1);
+        selected.add(chosenDate);
+      }
+
+      vacationByOfficer[entry.name] = selected;
+    });
+
+    businessDateKeys.forEach((dateKey) => {
+      const availableCount = simulationOfficers.filter((entry) => !vacationByOfficer[entry.name].has(dateKey)).length;
+      if (!availableCount) {
+        throw new Error(`Every simulation officer is on vacation on ${dateKey}. Reduce vacation days and try again.`);
+      }
+    });
+
+    return vacationByOfficer;
+  }
+
   async function runFairnessSimulationFromConfig(config) {
     const activeTypes = getActiveLoanTypeNames();
     if (!activeTypes.length) {
@@ -633,6 +818,7 @@
 
     const randomFn = createSeededRandom(config.seed);
     const businessDates = generateBusinessDates(config.monthLabel, config.businessDays);
+    const vacationByOfficer = buildOfficerVacationCalendar(config.simulationOfficers, businessDates, randomFn);
     let runningTotals = cloneRunningTotals({ officers: {} });
     let loanSequence = 1;
     const loanHistoryEntries = [];
@@ -642,7 +828,9 @@
       const dayLoans = generateSimulatedLoansForDate(date, loanCount, activeTypes, randomFn, loanSequence);
       loanSequence += dayLoans.length;
 
-      const dayResult = assignLoansWithRandom(config.officerNames, dayLoans, runningTotals, randomFn);
+      const dateKey = formatDateKey(date);
+      const availableOfficers = config.officerNames.filter((officer) => !vacationByOfficer[officer]?.has(dateKey));
+      const dayResult = assignLoansWithRandom(availableOfficers, dayLoans, runningTotals, randomFn);
       if (dayResult.error) {
         throw new Error(dayResult.error);
       }
@@ -655,7 +843,7 @@
         });
       });
 
-      runningTotals = buildUpdatedRunningTotals(config.officerNames, dayResult, runningTotals);
+      runningTotals = buildUpdatedRunningTotals(availableOfficers, dayResult, runningTotals);
     });
 
     const officerStats = buildSimulationOfficerStats(config.officerNames, loanHistoryEntries, config.eomGoalPerOfficer);
@@ -666,6 +854,7 @@
       businessDays: config.businessDays,
       eomGoalPerOfficer: config.eomGoalPerOfficer,
       officers: config.officerNames,
+      simulationOfficers: config.simulationOfficers,
       totalLoans: loanHistoryEntries.length,
       totalAmount: loanHistoryEntries.reduce((sum, entry) => sum + getGoalAmountForLoan(entry.loan), 0),
       loanHistoryEntries,
@@ -683,26 +872,33 @@
       return;
     }
 
-    const officers = getOfficerValues();
-    if (!officers.length) {
-      setSimulationModalMessage('Add at least one active loan officer before running the fairness simulation.', 'warning');
-      return;
-    }
-
     try {
       setSimulationModalMessage('');
-      const config = getSimulationConfigFromModal(officers);
+      const config = getSimulationConfigFromModal();
       const simulationResult = await runFairnessSimulationFromConfig(config);
       renderSimulationResults(simulationResult);
-      const fileName = await saveSimulationPdf(simulationResult);
+      const { fileName, pdfBlob } = await saveSimulationPdf(simulationResult);
+      const openedPreview = openSimulationPdfInNewTab(pdfBlob);
       closeSimulationModal();
-      setMessage(`Fairness simulation completed and saved to ${fileName}.`, 'success');
+      setMessage(
+        openedPreview
+          ? `Fairness simulation completed, opened in a new tab, and saved to ${fileName}.`
+          : `Fairness simulation completed and saved to ${fileName}. (Pop-up blocked, so preview tab could not be opened.)`,
+        openedPreview ? 'success' : 'warning'
+      );
     } catch (error) {
       setSimulationModalMessage(error.message, 'warning');
     }
   }
 
   runSimulationBtn?.addEventListener('click', openSimulationModal);
+  simulationAddOfficerBtn?.addEventListener('click', handleAddSimulationOfficer);
+  simulationOfficerNameInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleAddSimulationOfficer();
+    }
+  });
   closeSimulationModalBtn?.addEventListener('click', closeSimulationModal);
   cancelSimulationBtn?.addEventListener('click', closeSimulationModal);
   simulationFormEl?.addEventListener('submit', handleSimulationSubmit);

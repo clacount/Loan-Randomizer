@@ -202,6 +202,23 @@
         </label>
       </div>
 
+      <div class="simulation-officer-manager">
+        <div class="simulation-officer-heading">
+          <h3>Simulation Officers</h3>
+          <p class="hint">Add/remove officers here for simulation-only scenarios, and set vacation days in the selected month.</p>
+        </div>
+        <div class="simulation-officer-add-row">
+          <input id="simulationOfficerNameInput" type="text" placeholder="Loan officer name for simulation" />
+          <button id="simulationAddOfficerBtn" type="button">Add Officer</button>
+        </div>
+        <div class="simulation-officer-column-header" aria-hidden="true">
+          <span>Loan Officer</span>
+          <span>Vacation Days</span>
+          <span></span>
+        </div>
+        <div id="simulationOfficerList" class="stack"></div>
+      </div>
+
       <div id="simulationModalMessage" class="message"></div>
 
       <div class="modal-actions">

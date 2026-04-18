@@ -906,6 +906,47 @@ input[type="month"] {
   grid-column: 1 / -1;
 }
 
+.simulation-officer-manager {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background: #fbfdff;
+}
+
+.simulation-officer-heading h3 {
+  margin: 0 0 6px;
+}
+
+.simulation-officer-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.simulation-officer-column-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px 44px;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding: 0 2px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.simulation-officer-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px 44px;
+  gap: 10px;
+}
+
+.simulation-officer-row .remove-btn {
+  min-width: 44px;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -1082,8 +1123,14 @@ input[type="month"] {
   .officer-row,
   .loan-row,
   .type-manager-form,
-  .simulation-form-grid {
+  .simulation-form-grid,
+  .simulation-officer-add-row,
+  .simulation-officer-row {
     grid-template-columns: 1fr;
+  }
+
+  .simulation-officer-column-header {
+    display: none;
   }
 
   .audit-summary-metrics {
