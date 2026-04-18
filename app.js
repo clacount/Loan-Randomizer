@@ -30,6 +30,17 @@ const loanTypeSummaryStatsEl = document.getElementById('loanTypeSummaryStats');
 const distributionDetailsEl = document.getElementById('distributionDetails');
 const distributionChartsEl = document.getElementById('distributionCharts');
 
+const LOGO_PATH = './logo.png'
+
+const logoEl = document.getElementById('logo');
+
+if (LOGO_PATH) {
+  logoEl.src = LOGO_PATH;
+  logoEl.style.display = 'block';
+} else {
+  logoEl.style.display = 'none';
+}
+
 let outputDirectoryHandle = null;
 
 let isFolderPickerOpen = false;
