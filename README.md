@@ -61,14 +61,14 @@ The app also keeps a CSV state file named `loan-randomizer-running-totals.csv` i
 - For true direct save to SharePoint without local folder selection, this app would need Microsoft Graph integration (authentication + upload API calls), which is not implemented in this local-file version.
 
 ## Graph auth/upload stub (for IT integration planning)
-- A starter scaffold is included in `graph-sharepoint-stub.js`.
+- A starter scaffold is included in `src/integrations/graph-sharepoint-stub.js`.
 - The stubs expose `window.loanRandomizerGraphStubs` with:
   - `buildGraphDriveUploadUrl(...)`
   - `getGraphIntegrationChecklist()`
   - `getAccessTokenWithPkceStub()`
   - `uploadFileToSharePointStub(...)`
 - This scaffold is intentionally non-functional for production auth/upload. It is a safe handoff point for IT/dev teams to wire tenant-specific Microsoft Graph auth and library upload logic.
-- For a non-programmer rollout checklist, use `GRAPH-SETUP-EILI5.md`.
+- For a non-programmer rollout checklist, use `docs/GRAPH-SETUP-EILI5.md`.
 
 
 ## New history and PDF features

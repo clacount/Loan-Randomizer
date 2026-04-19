@@ -10,7 +10,7 @@ Goal: make the Loan Randomizer app able to save directly into a SharePoint docum
 
 Only this file in the app folder:
 
-- `graph-sharepoint-stub.js` (replace the two `throw new Error(...)` stubs with real token/upload calls)
+- `src/integrations/graph-sharepoint-stub.js` (replace the two `throw new Error(...)` stubs with real token/upload calls)
 
 And these values in the same file/function inputs:
 
@@ -64,7 +64,7 @@ Your IT/dev admin can get these from Graph Explorer or PowerShell once, then pas
 
 ## 4) Wire the two stub functions
 
-In `graph-sharepoint-stub.js`:
+In `src/integrations/graph-sharepoint-stub.js`:
 
 - `getAccessTokenWithPkceStub()`  
   Replace with real OAuth Authorization Code + PKCE token logic.
