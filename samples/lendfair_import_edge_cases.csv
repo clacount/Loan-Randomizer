@@ -1,0 +1,11 @@
+App #,Amount,Loan Category
+APP-2026-011,21000,Collateralized
+APP-2026-012,7300,Personal
+APP-2026-013,,Credit Card
+APP-2026-014,15800,HELOC
+APP-2026-015,-500,Personal
+,9200,Auto
+APP-2026-016,not-a-number,Collateralized
+APP-2026-017,14400,Auto
+APP-2026-011,21000,Collateralized
+APP-2026-018,6100,Personal
