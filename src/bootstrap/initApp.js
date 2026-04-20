@@ -62,6 +62,17 @@ const loanTypeStartInput = document.getElementById('loanTypeStartInput');
 const loanTypeEndInput = document.getElementById('loanTypeEndInput');
 const loanTypeListEl = document.getElementById('loanTypeList');
 const loanTypeSummaryStatsEl = document.getElementById('loanTypeSummaryStats');
+const loanTypeEditorModalEl = document.getElementById('loanTypeEditorModal');
+const closeLoanTypeEditorModalBtn = document.getElementById('closeLoanTypeEditorModalBtn');
+const cancelLoanTypeEditorBtn = document.getElementById('cancelLoanTypeEditorBtn');
+const loanTypeEditorForm = document.getElementById('loanTypeEditorForm');
+const loanTypeEditorNameInput = document.getElementById('loanTypeEditorNameInput');
+const loanTypeEditorAvailabilityInput = document.getElementById('loanTypeEditorAvailabilityInput');
+const loanTypeEditorCategoryInput = document.getElementById('loanTypeEditorCategoryInput');
+const loanTypeEditorStartInput = document.getElementById('loanTypeEditorStartInput');
+const loanTypeEditorEndInput = document.getElementById('loanTypeEditorEndInput');
+const loanTypeEditorGoalModeInput = document.getElementById('loanTypeEditorGoalModeInput');
+const loanTypeEditorModalMessageEl = document.getElementById('loanTypeEditorModalMessage');
 
 const distributionDetailsEl = document.getElementById('distributionDetails');
 const distributionChartsEl = document.getElementById('distributionCharts');
@@ -218,6 +229,7 @@ const LOAN_IMPORT_HEADER_ALIASES = {
 };
 
 let currentLoanImportContext = null;
+let editingLoanTypeOriginalName = null;
 let activeOfficerEditRow = null;
 
 let allLoanTypes = [...DEFAULT_LOAN_TYPES];
@@ -954,6 +966,69 @@ function closeOfficerEditorModal() {
   }
 }
 
+function setLoanTypeEditorModalMessage(text = '', tone = 'warning') {
+  if (!loanTypeEditorModalMessageEl) {
+    return;
+  }
+  loanTypeEditorModalMessageEl.textContent = text;
+  loanTypeEditorModalMessageEl.dataset.tone = text ? tone : '';
+}
+
+function syncLoanTypeEditorAvailability() {
+  const isSeasonal = loanTypeEditorAvailabilityInput?.value === 'seasonal';
+  if (loanTypeEditorStartInput) {
+    loanTypeEditorStartInput.disabled = !isSeasonal;
+    if (!isSeasonal) {
+      loanTypeEditorStartInput.value = '';
+    }
+  }
+  if (loanTypeEditorEndInput) {
+    loanTypeEditorEndInput.disabled = !isSeasonal;
+    if (!isSeasonal) {
+      loanTypeEditorEndInput.value = '';
+    }
+  }
+}
+
+function closeLoanTypeEditorModal() {
+  editingLoanTypeOriginalName = null;
+  setLoanTypeEditorModalMessage('');
+  if (loanTypeEditorModalEl) {
+    loanTypeEditorModalEl.hidden = true;
+  }
+}
+
+function openLoanTypeEditorModal(loanType) {
+  if (!loanTypeEditorModalEl || !loanType) {
+    return;
+  }
+
+  editingLoanTypeOriginalName = loanType.name;
+  if (loanTypeEditorNameInput) {
+    loanTypeEditorNameInput.value = loanType.name;
+  }
+  if (loanTypeEditorAvailabilityInput) {
+    loanTypeEditorAvailabilityInput.value = loanType.activeFrom || loanType.activeTo ? 'seasonal' : 'always';
+  }
+  if (loanTypeEditorCategoryInput) {
+    loanTypeEditorCategoryInput.value = loanCategoryUtils.normalizeLoanCategory(loanType.category);
+  }
+  if (loanTypeEditorStartInput) {
+    loanTypeEditorStartInput.value = loanType.activeFrom || '';
+  }
+  if (loanTypeEditorEndInput) {
+    loanTypeEditorEndInput.value = loanType.activeTo || '';
+  }
+  if (loanTypeEditorGoalModeInput) {
+    loanTypeEditorGoalModeInput.value = loanType.amountOptional ? 'unit' : 'amount';
+  }
+
+  syncLoanTypeEditorAvailability();
+  setLoanTypeEditorModalMessage('');
+  loanTypeEditorModalEl.hidden = false;
+  loanTypeEditorNameInput?.focus();
+}
+
 function syncOfficerEditorFromClassPreset() {
   if (!officerEditorClassSelect || !officerEditorConsumerWeightInput || !officerEditorMortgageWeightInput) {
     return;
@@ -1570,6 +1645,122 @@ async function removeCustomLoanType(typeName) {
   await saveLoanTypes(allLoanTypes);
 }
 
+function isValidDateKey(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+}
+
+function updateLoanRowTypeReferences(oldName, nextName) {
+  if (!loanList || oldName === nextName) {
+    return 0;
+  }
+
+  let updatedRows = 0;
+  [...loanList.querySelectorAll('.loan-row')].forEach((row) => {
+    const typeSelect = row.querySelector('.loan-type-select');
+    if (!typeSelect) {
+      return;
+    }
+
+    if (String(typeSelect.value) === oldName) {
+      buildLoanTypeSelectOptions(typeSelect, nextName);
+      updatedRows += 1;
+    }
+  });
+
+  return updatedRows;
+}
+
+async function editLoanType(existingName, updates) {
+  const target = allLoanTypes.find((type) => type.name === existingName);
+  if (!target) {
+    throw new Error(`Loan type ${existingName} was not found.`);
+  }
+
+  const nextName = String(updates.name || '').trim();
+  if (!nextName) {
+    throw new Error('Loan type name cannot be blank.');
+  }
+
+  if (allLoanTypes.some((type) => type.name.toLowerCase() === nextName.toLowerCase() && type.name !== existingName)) {
+    throw new Error(`Loan type ${nextName} already exists.`);
+  }
+
+  const nextActiveFrom = updates.activeFrom || null;
+  const nextActiveTo = updates.activeTo || null;
+
+  if (nextActiveFrom && !isValidDateKey(nextActiveFrom)) {
+    throw new Error('Start date must be blank or in YYYY-MM-DD format.');
+  }
+
+  if (nextActiveTo && !isValidDateKey(nextActiveTo)) {
+    throw new Error('End date must be blank or in YYYY-MM-DD format.');
+  }
+
+  if (nextActiveFrom && nextActiveTo && nextActiveFrom > nextActiveTo) {
+    throw new Error('Loan type start date must be on or before the end date.');
+  }
+
+  target.name = nextName;
+  target.category = updates.category;
+  target.activeFrom = nextActiveFrom;
+  target.activeTo = nextActiveTo;
+  target.amountOptional = Boolean(updates.amountOptional);
+  const normalizedTarget = normalizeLoanType(target);
+
+  const targetIndex = allLoanTypes.findIndex((type) => type.name === existingName);
+  if (targetIndex >= 0) {
+    allLoanTypes[targetIndex] = normalizedTarget;
+  }
+
+  const touchedLoans = updateLoanRowTypeReferences(existingName, nextName);
+  refreshLoanTypeSelects();
+  await saveLoanTypes(allLoanTypes);
+
+  return { touchedLoans };
+}
+
+async function handleLoanTypeEditorSubmit(event) {
+  event.preventDefault();
+
+  if (!editingLoanTypeOriginalName) {
+    setLoanTypeEditorModalMessage('Select a loan type to edit first.', 'warning');
+    return;
+  }
+
+  const normalizedCategory = loanCategoryUtils.normalizeLoanCategory(loanTypeEditorCategoryInput?.value || 'consumer');
+  const normalizedGoalMode = String(loanTypeEditorGoalModeInput?.value || 'amount').trim().toLowerCase();
+  const isSeasonal = (loanTypeEditorAvailabilityInput?.value || 'always') === 'seasonal';
+
+  if (normalizedGoalMode !== 'amount' && normalizedGoalMode !== 'unit') {
+    setLoanTypeEditorModalMessage('Goal mode must be amount or unit.', 'warning');
+    return;
+  }
+
+  try {
+    const nextName = String(loanTypeEditorNameInput?.value || '').trim();
+    const activeFrom = isSeasonal ? String(loanTypeEditorStartInput?.value || '').trim() : '';
+    const activeTo = isSeasonal ? String(loanTypeEditorEndInput?.value || '').trim() : '';
+    const { touchedLoans } = await editLoanType(editingLoanTypeOriginalName, {
+      name: nextName,
+      category: normalizedCategory,
+      activeFrom,
+      activeTo,
+      amountOptional: normalizedGoalMode === 'unit'
+    });
+
+    renderLoanTypes();
+    closeLoanTypeEditorModal();
+    setMessage(
+      touchedLoans
+        ? `Updated loan type ${nextName}. Refreshed ${touchedLoans} loan row${touchedLoans === 1 ? '' : 's'} to use the new name.`
+        : `Updated loan type ${nextName}.`,
+      'success'
+    );
+  } catch (error) {
+    setLoanTypeEditorModalMessage(error.message, 'warning');
+  }
+}
+
 function getBeforeRunDistribution(runningTotals, officers) {
   const cleanOfficers = [...new Set(officers.map((officer) => normalizeOfficerConfig(officer).name).filter(Boolean))];
 
@@ -1811,15 +2002,22 @@ function renderLoanTypes() {
           <div class="amount-summary">Category: ${escapeHtml(categoryLabel)}</div>
           <div class="amount-summary">Start: ${escapeHtml(loanType.activeFrom || 'Always')}</div>
           <div class="amount-summary">End: ${escapeHtml(loanType.activeTo || 'Always')}</div>
-          <div class="amount-summary">Amount optional: ${loanType.amountOptional ? 'Yes' : 'No'}</div>
+          <div class="amount-summary">Goal mode: ${loanType.amountOptional ? 'Per unit' : 'By amount'}</div>
         </div>
       </div>
     `;
 
-    if (!loanType.isBuiltIn) {
-      const actionRow = document.createElement('div');
-      actionRow.className = 'loan-type-action-row';
+    const actionRow = document.createElement('div');
+    actionRow.className = 'loan-type-action-row';
 
+    const editButton = document.createElement('button');
+    editButton.type = 'button';
+    editButton.textContent = 'Edit';
+    editButton.className = 'loan-type-action-btn activate';
+    editButton.addEventListener('click', () => openLoanTypeEditorModal(loanType));
+    actionRow.appendChild(editButton);
+
+    if (!loanType.isBuiltIn) {
       const toggleButton = document.createElement('button');
       toggleButton.type = 'button';
       toggleButton.textContent = isActive ? 'Deactivate' : 'Activate';
@@ -1872,8 +2070,9 @@ function renderLoanTypes() {
 
       actionRow.appendChild(toggleButton);
       actionRow.appendChild(removeButton);
-      wrapper.appendChild(actionRow);
     }
+
+    wrapper.appendChild(actionRow);
 
     loanTypeListEl.appendChild(wrapper);
   });
@@ -3257,6 +3456,11 @@ function getNormalizedFairnessValue(total, activeSessionCount) {
   return total / Math.max(activeSessionCount, 1);
 }
 
+function getNormalizedAmountFairnessValue(total, activeSessionCount) {
+  const normalizedAmount = getNormalizedFairnessValue(total, activeSessionCount);
+  return Math.log10(Math.max(normalizedAmount, 0) + 1);
+}
+
 function calculateVariance(values) {
   if (!values.length) {
     return 0;
@@ -3273,9 +3477,69 @@ function buildProjectedLoads(eligibleOfficerNames, currentTotals, officerActiveS
   ));
 }
 
+function getCategoryCountFromTypeCounts(typeCounts, loanCategory) {
+  return Object.entries(typeCounts || {}).reduce((sum, [loanType, count]) => (
+    getLoanCategoryForType(loanType) === loanCategory ? sum + Number(count || 0) : sum
+  ), 0);
+}
+
+function getEstimatedCategoryAmountTotal(typeCounts, totalAmount, loanCategory) {
+  const totalLoans = Object.values(typeCounts || {}).reduce((sum, count) => sum + Number(count || 0), 0);
+  if (!totalLoans) {
+    return 0;
+  }
+
+  const categoryLoans = getCategoryCountFromTypeCounts(typeCounts, loanCategory);
+  const categoryRatio = categoryLoans / totalLoans;
+  return totalAmount * categoryRatio;
+}
+
+function getCategoryWeightBias(categoryWeight) {
+  return 0.8 + (0.2 * Math.max(0, Math.min(1, categoryWeight)));
+}
+
+function getOfficerCategoryParticipationBias(officerConfig, loanCategory, eligibleOfficerConfigs) {
+  if (loanCategory !== loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE) {
+    return 1;
+  }
+
+  const hasMortgageOnlyOfficer = eligibleOfficerConfigs.some((candidate) => {
+    const eligibility = loanCategoryUtils.normalizeOfficerEligibility(candidate.eligibility);
+    return !eligibility.consumer && eligibility.mortgage;
+  });
+
+  if (!hasMortgageOnlyOfficer) {
+    return 1;
+  }
+
+  const eligibility = loanCategoryUtils.normalizeOfficerEligibility(officerConfig?.eligibility);
+  const isMortgageOnly = !eligibility.consumer && eligibility.mortgage;
+  const isFlex = eligibility.consumer && eligibility.mortgage;
+
+  if (isMortgageOnly) {
+    return 1.15;
+  }
+
+  if (isFlex) {
+    return 0.6;
+  }
+
+  return 1;
+}
+
 function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCounts, officerAmountTotals, officerActiveSessions, loan) {
   const loanCategory = getLoanCategoryForType(loan.type);
-  const eligibleOfficers = Object.values(officersByName).filter((officerConfig) => isOfficerEligibleForLoanType(officerConfig, loan));
+  let eligibleOfficers = Object.values(officersByName).filter((officerConfig) => isOfficerEligibleForLoanType(officerConfig, loan));
+  const isHelocLoan = String(loan?.type || '').trim().toLowerCase() === 'heloc';
+  if (loanCategory === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE && !isHelocLoan) {
+    const mortgageOnlyOfficers = eligibleOfficers.filter((officerConfig) => {
+      const eligibility = loanCategoryUtils.normalizeOfficerEligibility(officerConfig.eligibility);
+      return !eligibility.consumer && eligibility.mortgage;
+    });
+    if (mortgageOnlyOfficers.length) {
+      eligibleOfficers = mortgageOnlyOfficers;
+    }
+  }
 
   if (!eligibleOfficers.length) {
     return {
@@ -3288,6 +3552,16 @@ function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCoun
   const goalAmount = getGoalAmountForLoan(loan);
   const eligibleOfficerNames = eligibleOfficers.map((officer) => officer.name);
   const shuffledOfficers = shuffle(eligibleOfficerNames);
+  const categoryLoanTotals = Object.fromEntries(
+    eligibleOfficerNames.map((officerName) => [officerName, getCategoryCountFromTypeCounts(officerTypeCounts[officerName], loanCategory)])
+  );
+  const categoryAmountTotals = Object.fromEntries(
+    eligibleOfficerNames.map((officerName) => [officerName, getEstimatedCategoryAmountTotal(
+      officerTypeCounts[officerName],
+      officerAmountTotals[officerName],
+      loanCategory
+    )])
+  );
 
   const scoredOfficers = shuffledOfficers.map((officer) => {
     const currentTypeTotals = Object.fromEntries(
@@ -3295,17 +3569,43 @@ function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCoun
     );
 
     const projectedTypeLoads = buildProjectedLoads(eligibleOfficerNames, currentTypeTotals, officerActiveSessions, officer, 1);
-    const projectedAmountLoads = buildProjectedLoads(eligibleOfficerNames, officerAmountTotals, officerActiveSessions, officer, goalAmount);
-    const projectedLoanLoads = buildProjectedLoads(eligibleOfficerNames, officerLoanTotals, officerActiveSessions, officer, 1);
+    const projectedAmountLoads = eligibleOfficerNames.map((officerName) => getNormalizedAmountFairnessValue(
+      categoryAmountTotals[officerName] + (officerName === officer ? goalAmount : 0),
+      officerActiveSessions[officerName]
+    ));
+    const projectedRawAmountLoads = eligibleOfficerNames.map((officerName) => getNormalizedFairnessValue(
+      categoryAmountTotals[officerName] + (officerName === officer ? goalAmount : 0),
+      officerActiveSessions[officerName]
+    ));
+    const projectedLoanLoads = buildProjectedLoads(eligibleOfficerNames, categoryLoanTotals, officerActiveSessions, officer, 1);
 
     const typeVariance = calculateVariance(projectedTypeLoads);
     const amountVariance = calculateVariance(projectedAmountLoads);
     const loanVariance = calculateVariance(projectedLoanLoads);
     const distinctTypePenalty = getDistinctTypeCount(officerTypeCounts[officer]) * 0.0025;
-    const currentAmountPenalty = getNormalizedFairnessValue(officerAmountTotals[officer] + goalAmount, officerActiveSessions[officer]) * 0.00001;
-    const fairnessScore = (typeVariance * 4) + (amountVariance * 3) + (loanVariance * 2) + distinctTypePenalty + currentAmountPenalty;
+    const currentAmountPenalty = getNormalizedAmountFairnessValue(
+      categoryAmountTotals[officer] + goalAmount,
+      officerActiveSessions[officer]
+    ) * 0.01;
+    let consumerDollarDriftPenalty = 0;
+    if (loanCategory === loanCategoryUtils.LOAN_CATEGORIES.CONSUMER && projectedRawAmountLoads.length) {
+      const projectedRawAverage = projectedRawAmountLoads.reduce((sum, value) => sum + value, 0) / projectedRawAmountLoads.length;
+      const projectedOfficerRawAmountLoad = getNormalizedFairnessValue(
+        categoryAmountTotals[officer] + goalAmount,
+        officerActiveSessions[officer]
+      );
+      const allowedConsumerAmountLoad = projectedRawAverage * 1.2;
+      if (projectedOfficerRawAmountLoad > allowedConsumerAmountLoad && projectedRawAverage > 0) {
+        const overageRatio = (projectedOfficerRawAmountLoad - allowedConsumerAmountLoad) / projectedRawAverage;
+        consumerDollarDriftPenalty = (overageRatio ** 2) * 6;
+      }
+    }
+    const amountWeightMultiplier = loanCategory === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE ? 6 : 5;
+    const loanWeightMultiplier = loanCategory === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE ? 1 : 1.5;
+    const fairnessScore = (typeVariance * 4) + (amountVariance * amountWeightMultiplier) + (loanVariance * loanWeightMultiplier) + distinctTypePenalty + currentAmountPenalty + consumerDollarDriftPenalty;
     const categoryWeight = loanCategoryUtils.getCategoryWeightForOfficer(officersByName[officer], loanCategory);
-    const score = fairnessScore / Math.max(categoryWeight, 0.01);
+    const participationBias = getOfficerCategoryParticipationBias(officersByName[officer], loanCategory, eligibleOfficers);
+    const score = fairnessScore / (getCategoryWeightBias(categoryWeight) * participationBias);
 
     return {
       officer,
@@ -3318,6 +3618,7 @@ function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCoun
       loanVariance,
       distinctTypePenalty,
       currentAmountPenalty,
+      consumerDollarDriftPenalty,
       projectedTypeLoad: getNormalizedFairnessValue((officerTypeCounts[officer][loan.type] || 0) + 1, officerActiveSessions[officer]),
       projectedAmountLoad: getNormalizedFairnessValue(officerAmountTotals[officer] + goalAmount, officerActiveSessions[officer]),
       projectedLoanLoad: getNormalizedFairnessValue(officerLoanTotals[officer] + 1, officerActiveSessions[officer])
@@ -4016,6 +4317,15 @@ loanImportModalEl?.addEventListener('click', (event) => {
   }
 });
 officerEditorClassSelect?.addEventListener('change', syncOfficerEditorFromClassPreset);
+loanTypeEditorAvailabilityInput?.addEventListener('change', syncLoanTypeEditorAvailability);
+closeLoanTypeEditorModalBtn?.addEventListener('click', closeLoanTypeEditorModal);
+cancelLoanTypeEditorBtn?.addEventListener('click', closeLoanTypeEditorModal);
+loanTypeEditorForm?.addEventListener('submit', handleLoanTypeEditorSubmit);
+loanTypeEditorModalEl?.addEventListener('click', (event) => {
+  if (event.target === loanTypeEditorModalEl) {
+    closeLoanTypeEditorModal();
+  }
+});
 closeOfficerEditorModalBtn?.addEventListener('click', closeOfficerEditorModal);
 cancelOfficerEditorBtn?.addEventListener('click', closeOfficerEditorModal);
 officerEditorModalEl?.addEventListener('click', (event) => {

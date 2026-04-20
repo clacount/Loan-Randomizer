@@ -288,6 +288,60 @@
   </div>
 </div>
 
+<div id="loanTypeEditorModal" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="loanTypeEditorModalTitle">
+    <div class="modal-header">
+      <div>
+        <h2 id="loanTypeEditorModalTitle">Edit Loan Type</h2>
+        <p class="hint">Update Name, Availability, Category, Start, End, and Goal mode.</p>
+      </div>
+      <button id="closeLoanTypeEditorModalBtn" class="modal-close-btn" type="button" aria-label="Close loan type editor">×</button>
+    </div>
+    <form id="loanTypeEditorForm" class="simulation-form">
+      <div class="simulation-form-grid">
+        <label>
+          <span>Name</span>
+          <input id="loanTypeEditorNameInput" type="text" required />
+        </label>
+        <label>
+          <span>Availability</span>
+          <select id="loanTypeEditorAvailabilityInput">
+            <option value="always">Always</option>
+            <option value="seasonal">Seasonal</option>
+          </select>
+        </label>
+        <label>
+          <span>Category</span>
+          <select id="loanTypeEditorCategoryInput">
+            <option value="consumer">Consumer</option>
+            <option value="mortgage">Mortgage</option>
+          </select>
+        </label>
+        <label>
+          <span>Start</span>
+          <input id="loanTypeEditorStartInput" type="date" />
+        </label>
+        <label>
+          <span>End</span>
+          <input id="loanTypeEditorEndInput" type="date" />
+        </label>
+        <label>
+          <span>Goal mode</span>
+          <select id="loanTypeEditorGoalModeInput">
+            <option value="amount">By amount</option>
+            <option value="unit">Per unit</option>
+          </select>
+        </label>
+      </div>
+      <div id="loanTypeEditorModalMessage" class="message" aria-live="polite"></div>
+      <div class="modal-actions">
+        <button id="cancelLoanTypeEditorBtn" type="button">Cancel</button>
+        <button class="primary" type="submit">Save Loan Type</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div id="simulationModal" class="modal-overlay" hidden>
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="simulationModalTitle">
     <div class="modal-header">
