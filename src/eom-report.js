@@ -1,4 +1,5 @@
 (function initializeEndOfMonthReportFeature() {
+  const fairnessEngineService = window.FairnessEngineService;
   function buildEomPdfFileName(date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -96,39 +97,57 @@
   }
 
   function buildFairnessSummary(officerStats) {
-    const loanCounts = officerStats.map((entry) => entry.loanCount);
-    const dollarAmounts = officerStats.map((entry) => entry.totalAmountRequested);
-    const averageLoanCount = loanCounts.length
-      ? loanCounts.reduce((sum, value) => sum + value, 0) / loanCounts.length
-      : 0;
-    const averageDollarAmount = dollarAmounts.length
-      ? dollarAmounts.reduce((sum, value) => sum + value, 0) / dollarAmounts.length
-      : 0;
-    const highestLoanCount = loanCounts.length ? Math.max(...loanCounts) : 0;
-    const lowestLoanCount = loanCounts.length ? Math.min(...loanCounts) : 0;
-    const highestDollarAmount = dollarAmounts.length ? Math.max(...dollarAmounts) : 0;
-    const lowestDollarAmount = dollarAmounts.length ? Math.min(...dollarAmounts) : 0;
-    const maxCountVariancePercent = averageLoanCount
-      ? ((highestLoanCount - lowestLoanCount) / averageLoanCount) * 100
-      : 0;
-    const maxAmountVariancePercent = averageDollarAmount
-      ? ((highestDollarAmount - lowestDollarAmount) / averageDollarAmount) * 100
-      : 0;
+    const officerFairnessStats = officerStats.map((entry) => {
+      const totalLoans = Number(entry.loanCount) || 0;
+      const totalAmount = Number(entry.totalAmountRequested) || 0;
+      let consumerLoanCount = 0;
+      let mortgageLoanCount = 0;
+
+      Object.entries(entry.typeCounts || {}).forEach(([typeName, count]) => {
+        if (getLoanCategoryForType(typeName) === 'mortgage') {
+          mortgageLoanCount += Number(count) || 0;
+        } else {
+          consumerLoanCount += Number(count) || 0;
+        }
+      });
+
+      const consumerShare = totalLoans ? consumerLoanCount / totalLoans : 0;
+      const mortgageShare = totalLoans ? mortgageLoanCount / totalLoans : 0;
+
+      return {
+        officer: entry.officer,
+        totalLoans,
+        totalAmount,
+        consumerLoanCount,
+        consumerAmount: totalAmount * consumerShare,
+        mortgageLoanCount,
+        mortgageAmount: totalAmount * mortgageShare,
+        typeBreakdown: entry.typeCounts || {}
+      };
+    });
+
+    const fairnessEvaluation = fairnessEngineService.evaluateFairness({
+      engineType: fairnessEngineService.getSelectedFairnessEngine(),
+      officers: officerStats.map((entry) => ({ name: entry.officer, eligibility: { consumer: true, mortgage: true } })),
+      officerStats: officerFairnessStats
+    });
 
     return {
-      averageLoanCount,
-      averageDollarAmount,
-      highestLoanCount,
-      lowestLoanCount,
-      highestDollarAmount,
-      lowestDollarAmount,
-      maxCountVariancePercent,
-      maxAmountVariancePercent,
-      countDistributionPass: maxCountVariancePercent <= 15,
-      amountDistributionPass: maxAmountVariancePercent <= 20,
-      overallPass: maxCountVariancePercent <= 15 && maxAmountVariancePercent <= 20
+      averageLoanCount: fairnessEvaluation.metrics.averageLoanCount,
+      averageDollarAmount: fairnessEvaluation.metrics.averageDollarAmount,
+      highestLoanCount: officerStats.length ? Math.max(...officerStats.map((entry) => entry.loanCount)) : 0,
+      lowestLoanCount: officerStats.length ? Math.min(...officerStats.map((entry) => entry.loanCount)) : 0,
+      highestDollarAmount: officerStats.length ? Math.max(...officerStats.map((entry) => entry.totalAmountRequested)) : 0,
+      lowestDollarAmount: officerStats.length ? Math.min(...officerStats.map((entry) => entry.totalAmountRequested)) : 0,
+      maxCountVariancePercent: fairnessEvaluation.metrics.maxCountVariancePercent,
+      maxAmountVariancePercent: fairnessEvaluation.metrics.maxAmountVariancePercent,
+      countDistributionPass: fairnessEvaluation.metrics.maxCountVariancePercent <= 15,
+      amountDistributionPass: fairnessEvaluation.metrics.maxAmountVariancePercent <= 20,
+      overallPass: fairnessEvaluation.overallResult === 'PASS',
+      evaluation: fairnessEvaluation
     };
   }
+
 
   function buildEomDistributionCharts(officerStats) {
     const distribution = officerStats.map((entry) => ({
@@ -188,6 +207,21 @@
     ];
   }
 
+  function buildEvaluationNoteLines(notes = []) {
+    const normalizedNotes = notes
+      .map((note) => String(note || '').replace(/^Note:\s*/i, '').trim())
+      .filter(Boolean);
+
+    if (!normalizedNotes.length) {
+      return [];
+    }
+
+    return [
+      { text: 'Notes:', size: 12, gapAfter: 4 },
+      ...normalizedNotes.map((note) => ({ text: `- ${note}`, size: 10, gapAfter: 4 }))
+    ];
+  }
+
   function buildEomPdfLines(report) {
     const lines = [
       { text: 'End of Month Loan Assignment Report', size: 18, gapAfter: 16 },
@@ -201,7 +235,11 @@
       { text: `Average goal dollars per officer: ${formatCurrency(report.fairnessSummary.averageDollarAmount)}`, size: 11, gapAfter: 4 },
       { text: `Loan count variance: ${report.fairnessSummary.maxCountVariancePercent.toFixed(1)}%`, size: 11, gapAfter: 4 },
       { text: `Goal dollar variance: ${report.fairnessSummary.maxAmountVariancePercent.toFixed(1)}%`, size: 11, gapAfter: 4 },
-      { text: `Fairness status: ${report.fairnessSummary.overallPass ? 'PASS' : 'REVIEW'}`, size: 11, gapAfter: 12 },
+      { text: `Fairness status: ${report.fairnessSummary.overallPass ? 'PASS' : 'REVIEW'}`, size: 11, gapAfter: 4 },
+      { text: `Fairness model: ${fairnessEngineService.FAIRNESS_ENGINE_LABELS[report.fairnessSummary.evaluation.engineType]}`, size: 11, gapAfter: 4 },
+      ...report.fairnessSummary.evaluation.summaryItems.map((item) => ({ text: item, size: 11, gapAfter: 4 })),
+      ...buildEvaluationNoteLines(report.fairnessSummary.evaluation.notes),
+      { text: '', size: 10, gapAfter: 6 },
       { text: 'Officer Totals', size: 14, gapAfter: 10 }
     ];
 
@@ -249,7 +287,15 @@
       lines.push({ text: 'Summary', size: 14, gapAfter: 10 });
       lines.push({ text: `Average loans per officer: ${report.fairnessSummary.averageLoanCount.toFixed(2)}`, size: 11, gapAfter: 4 });
       lines.push({ text: `Average dollars per officer: ${formatCurrency(report.fairnessSummary.averageDollarAmount)}`, size: 11, gapAfter: 4 });
-      lines.push({ text: `Fairness status: ${report.fairnessSummary.overallPass ? 'PASS' : 'REVIEW'}`, size: 11, gapAfter: 10 });
+      lines.push({ text: `Fairness status: ${report.fairnessSummary.overallPass ? 'PASS' : 'REVIEW'}`, size: 11, gapAfter: 4 });
+      lines.push({ text: `Fairness model: ${fairnessEngineService.FAIRNESS_ENGINE_LABELS[report.fairnessSummary.evaluation.engineType]}`, size: 11, gapAfter: 4 });
+      report.fairnessSummary.evaluation.summaryItems.forEach((item) => {
+        lines.push({ text: item, size: 11, gapAfter: 4 });
+      });
+      buildEvaluationNoteLines(report.fairnessSummary.evaluation.notes).forEach((line) => {
+        lines.push(line);
+      });
+      lines.push({ text: '', size: 10, gapAfter: 6 });
     }
 
     if (report.includeOfficerTotals) {
@@ -271,7 +317,15 @@
       lines.push({ text: `Highest loan count: ${report.fairnessSummary.highestLoanCount}`, size: 11, gapAfter: 4 });
       lines.push({ text: `Lowest loan count: ${report.fairnessSummary.lowestLoanCount}`, size: 11, gapAfter: 4 });
       lines.push({ text: `Highest dollar total: ${formatCurrency(report.fairnessSummary.highestDollarAmount)}`, size: 11, gapAfter: 4 });
-      lines.push({ text: `Lowest dollar total: ${formatCurrency(report.fairnessSummary.lowestDollarAmount)}`, size: 11, gapAfter: 8 });
+      lines.push({ text: `Lowest dollar total: ${formatCurrency(report.fairnessSummary.lowestDollarAmount)}`, size: 11, gapAfter: 4 });
+      lines.push({ text: `Fairness model: ${fairnessEngineService.FAIRNESS_ENGINE_LABELS[report.fairnessSummary.evaluation.engineType]}`, size: 11, gapAfter: 4 });
+      report.fairnessSummary.evaluation.summaryItems.forEach((item) => {
+        lines.push({ text: item, size: 11, gapAfter: 4 });
+      });
+      buildEvaluationNoteLines(report.fairnessSummary.evaluation.notes).forEach((line) => {
+        lines.push(line);
+      });
+      lines.push({ text: '', size: 10, gapAfter: 4 });
     }
 
     if (report.includeLoanHistory) {
