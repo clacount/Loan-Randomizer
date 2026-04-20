@@ -3741,7 +3741,7 @@ function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCoun
     if (mortgageOnlyOfficers.length) {
       eligibleOfficers = mortgageOnlyOfficers;
     } else {
-      const flexCoverageOfficers = Object.values(officersByName).filter((officerConfig) => {
+      const flexCoverageOfficers = eligibleOfficers.filter((officerConfig) => {
         const eligibility = loanCategoryUtils.normalizeOfficerEligibility(officerConfig.eligibility);
         return eligibility.consumer && eligibility.mortgage;
       });

@@ -1,5 +1,6 @@
 (function initializeEndOfMonthReportFeature() {
   const fairnessEngineService = window.FairnessEngineService;
+  const loanCategoryUtils = window.LoanCategoryUtils;
   function buildEomPdfFileName(date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -59,16 +60,19 @@
           averageLoanAmount: normalizedStats.loanCount ? normalizedStats.totalAmountRequested / normalizedStats.loanCount : 0,
           typeCounts: normalizedStats.typeCounts,
           activeSessionCount: normalizedStats.activeSessionCount,
-          isOnVacation: normalizedStats.isOnVacation
+          isOnVacation: normalizedStats.isOnVacation,
+          eligibility: normalizedStats.eligibility,
+          mortgageOverride: normalizedStats.mortgageOverride
         };
       });
   }
 
-  function buildOfficerStatsFromHistory(entries) {
+  function buildOfficerStatsFromHistory(entries, officerConfigByName = {}) {
     const officerMap = new Map();
 
     entries.forEach((entry) => {
       const officer = String(entry.assignedOfficer || '').trim() || 'Unassigned';
+      const officerConfig = normalizeOfficerStats(officerConfigByName[officer]);
       if (!officerMap.has(officer)) {
         officerMap.set(officer, {
           officer,
@@ -77,7 +81,9 @@
           averageLoanAmount: 0,
           typeCounts: {},
           activeSessionCount: 0,
-          isOnVacation: false
+          isOnVacation: false,
+          eligibility: officerConfig.eligibility,
+          mortgageOverride: officerConfig.mortgageOverride
         });
       }
 
@@ -94,6 +100,17 @@
         typeCounts: normalizeTypeCounts(stats.typeCounts)
       }))
       .sort((officerA, officerB) => officerA.officer.localeCompare(officerB.officer));
+  }
+
+  function normalizeFairnessEligibility(eligibility) {
+    if (loanCategoryUtils?.normalizeOfficerEligibility) {
+      return loanCategoryUtils.normalizeOfficerEligibility(eligibility);
+    }
+
+    return {
+      consumer: typeof eligibility?.consumer === 'boolean' ? eligibility.consumer : true,
+      mortgage: typeof eligibility?.mortgage === 'boolean' ? eligibility.mortgage : true
+    };
   }
 
   function buildFairnessSummary(officerStats) {
@@ -128,7 +145,11 @@
 
     const fairnessEvaluation = fairnessEngineService.evaluateFairness({
       engineType: fairnessEngineService.getSelectedFairnessEngine(),
-      officers: officerStats.map((entry) => ({ name: entry.officer, eligibility: { consumer: true, mortgage: true } })),
+      officers: officerStats.map((entry) => ({
+        name: entry.officer,
+        eligibility: normalizeFairnessEligibility(entry.eligibility),
+        mortgageOverride: Boolean(entry.mortgageOverride)
+      })),
       officerStats: officerFairnessStats
     });
 
@@ -469,7 +490,10 @@
 
   async function buildCustomReport(config) {
     const generatedAt = new Date();
-    const { loanHistory } = await loadLoanHistory();
+    const [{ loanHistory }, { runningTotals }] = await Promise.all([
+      loadLoanHistory(),
+      loadRunningTotals()
+    ]);
     const allEntries = normalizeHistoryEntries(loanHistory);
     const startBound = parseDateInputToBounds(config.startDate, false);
     const endBound = parseDateInputToBounds(config.endDate, true);
@@ -494,7 +518,7 @@
       throw new Error('No loan history was found for the selected date range.');
     }
 
-    const officerStats = buildOfficerStatsFromHistory(filteredEntries);
+    const officerStats = buildOfficerStatsFromHistory(filteredEntries, runningTotals?.officers || {});
     const fairnessSummary = buildFairnessSummary(officerStats);
     const reportSettings = getCustomReportTypeSettings(config.reportType);
 
