@@ -81,6 +81,8 @@
           totalAmountRequested: 0,
           averageLoanAmount: 0,
           typeCounts: {},
+          consumerAmountRequested: 0,
+          mortgageAmountRequested: 0,
           activeSessionCount: 0,
           isOnVacation: false,
           eligibility: officerConfig.eligibility,
@@ -89,9 +91,15 @@
       }
 
       const stats = officerMap.get(officer);
+      const amountRequested = Number(entry.amountRequested) || 0;
       stats.loanCount += 1;
-      stats.totalAmountRequested += Number(entry.amountRequested) || 0;
+      stats.totalAmountRequested += amountRequested;
       stats.typeCounts[entry.type] = (stats.typeCounts[entry.type] || 0) + 1;
+      if (getLoanCategoryForType(entry.type) === 'mortgage') {
+        stats.mortgageAmountRequested += amountRequested;
+      } else {
+        stats.consumerAmountRequested += amountRequested;
+      }
     });
 
     return Array.from(officerMap.values())
@@ -129,17 +137,23 @@
         }
       });
 
-      const consumerShare = totalLoans ? consumerLoanCount / totalLoans : 0;
-      const mortgageShare = totalLoans ? mortgageLoanCount / totalLoans : 0;
+      const fallbackConsumerShare = totalLoans ? consumerLoanCount / totalLoans : 0;
+      const fallbackMortgageShare = totalLoans ? mortgageLoanCount / totalLoans : 0;
+      const consumerAmount = Number.isFinite(entry.consumerAmountRequested)
+        ? Number(entry.consumerAmountRequested)
+        : totalAmount * fallbackConsumerShare;
+      const mortgageAmount = Number.isFinite(entry.mortgageAmountRequested)
+        ? Number(entry.mortgageAmountRequested)
+        : totalAmount * fallbackMortgageShare;
 
       return {
         officer: entry.officer,
         totalLoans,
         totalAmount,
         consumerLoanCount,
-        consumerAmount: totalAmount * consumerShare,
+        consumerAmount,
         mortgageLoanCount,
-        mortgageAmount: totalAmount * mortgageShare,
+        mortgageAmount,
         typeBreakdown: entry.typeCounts || {}
       };
     });
@@ -222,6 +236,12 @@
       const totalAmount = Number(entry.totalAmountRequested) || 0;
       const totalLoans = Number(entry.loanCount) || 0;
       const consumerShare = totalLoans ? consumerLoanCount / totalLoans : 0;
+      const consumerAmount = Number.isFinite(entry.consumerAmountRequested)
+        ? Number(entry.consumerAmountRequested)
+        : totalAmount * consumerShare;
+      const mortgageAmount = Number.isFinite(entry.mortgageAmountRequested)
+        ? Number(entry.mortgageAmountRequested)
+        : totalAmount - consumerAmount;
 
       return {
         officer: entry.officer,
@@ -229,8 +249,8 @@
         totalAmountRequested: totalAmount,
         consumerLoanCount,
         mortgageLoanCount,
-        consumerAmount: totalAmount * consumerShare,
-        mortgageAmount: totalAmount * (1 - consumerShare)
+        consumerAmount,
+        mortgageAmount: Math.max(0, mortgageAmount)
       };
     });
 
