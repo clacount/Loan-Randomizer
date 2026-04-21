@@ -199,7 +199,7 @@
       }
     }
 
-    const improved = best.consumerVariancePercent < baselineVariance;
+    const improved = best.loanToOfficerMap !== initialLoanToOfficerMap;
     return {
       improved,
       optimizationRan: true,
