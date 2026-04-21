@@ -2143,24 +2143,28 @@ function renderDistributionCharts(result, officers, runningTotals) {
       title: `${selectedEngine === 'officer_lane' ? 'Consumer Goal Dollars Before Run (Role-Based)' : 'Consumer Goal Dollars Before Run'}`,
       distribution: consumerDollarBeforeLaneDistribution,
       field: 'totalAmountRequested',
+      showMortgageNote: false,
       valueFormatter: (value) => formatCurrency(value)
     },
     {
       title: `${selectedEngine === 'officer_lane' ? 'Consumer Goal Dollars After Run (Role-Based)' : 'Consumer Goal Dollars After Run'}`,
       distribution: consumerDollarAfterLaneDistribution,
       field: 'totalAmountRequested',
+      showMortgageNote: false,
       valueFormatter: (value) => formatCurrency(value)
     },
     {
       title: `${selectedEngine === 'officer_lane' ? 'Mortgage Goal Dollars Before Run' : 'Goal Dollars Before Run'}${fairnessEvaluation.chartAnnotations?.mortgageTitleSuffix || ''}`,
       distribution: dollarBeforeDistribution,
       field: 'totalAmountRequested',
+      showMortgageNote: true,
       valueFormatter: (value) => formatCurrency(value)
     },
     {
       title: `${selectedEngine === 'officer_lane' ? 'Mortgage Goal Dollars After Run' : 'Goal Dollars After Run'}${fairnessEvaluation.chartAnnotations?.mortgageTitleSuffix || ''}`,
       distribution: dollarAfterDistribution,
       field: 'totalAmountRequested',
+      showMortgageNote: true,
       valueFormatter: (value) => formatCurrency(value)
     }
   ];
@@ -2184,7 +2188,7 @@ function renderDistributionCharts(result, officers, runningTotals) {
     });
 
     chartCard.appendChild(canvas);
-    if (config.field === 'totalAmountRequested' && fairnessEvaluation.chartAnnotations?.mortgageNote) {
+    if (config.showMortgageNote && fairnessEvaluation.chartAnnotations?.mortgageNote) {
       const note = document.createElement('p');
       note.className = 'distribution-chart-note';
       note.textContent = selectedEngine === 'officer_lane'
