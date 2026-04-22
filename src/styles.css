@@ -113,6 +113,66 @@ header p {
 .fairness-model-badge {
   white-space: nowrap;
 }
+
+.focus-weight-active-summary {
+  margin: 0;
+}
+
+.focus-weight-settings {
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.focus-weight-settings-step3 {
+  margin: 8px 0 12px;
+  border: 2px solid #8fd0ad;
+  background: linear-gradient(135deg, #f2fbf6 0%, #e4f6ec 100%);
+  box-shadow: 0 6px 18px rgba(18, 108, 69, 0.08);
+}
+
+.focus-weight-settings-step3 summary {
+  color: #126c45;
+}
+
+.focus-weight-settings summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.focus-weight-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+.focus-weight-grid .full-width {
+  grid-column: 1 / -1;
+}
+
+.focus-weight-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.focus-weight-grid input {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  width: 100%;
+}
+
+.focus-weight-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
 .brand-slogan {
   font-size: 1.05rem;
   font-weight: 600;
