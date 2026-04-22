@@ -27,6 +27,14 @@ const loanAssignmentsEl = document.getElementById('loanAssignments');
 const officerAssignmentsEl = document.getElementById('officerAssignments');
 const fairnessAuditEl = document.getElementById('fairnessAudit');
 const fairnessModelSelectEl = document.getElementById('fairnessModelSelect');
+const focusWeightActiveSummaryEl = document.getElementById('focusWeightActiveSummary');
+const consumerFocusedPrimaryInput = document.getElementById('consumerFocusedPrimaryInput');
+const consumerFocusedSecondaryInput = document.getElementById('consumerFocusedSecondaryInput');
+const mortgageFocusedPrimaryInput = document.getElementById('mortgageFocusedPrimaryInput');
+const mortgageFocusedSecondaryInput = document.getElementById('mortgageFocusedSecondaryInput');
+const saveFocusWeightsBtn = document.getElementById('saveFocusWeightsBtn');
+const resetFocusWeightsBtn = document.getElementById('resetFocusWeightsBtn');
+const focusWeightSettingsMessageEl = document.getElementById('focusWeightSettingsMessage');
 
 const loanImportModalEl = document.getElementById('loanImportModal');
 const closeLoanImportModalBtn = document.getElementById('closeLoanImportModalBtn');
@@ -236,6 +244,7 @@ let activeOfficerEditRow = null;
 let allLoanTypes = [...DEFAULT_LOAN_TYPES];
 const loanCategoryUtils = window.LoanCategoryUtils;
 const fairnessEngineService = window.FairnessEngineService;
+const focusWeightSettingsService = window.FocusWeightSettingsService;
 
 function getSelectedFairnessEngine() {
   return fairnessEngineService?.getSelectedFairnessEngine?.() || 'global';
@@ -348,38 +357,94 @@ function updateFairnessMethodologyCopy() {
   }
 }
 
-const OFFICER_CLASS_PRESETS = {
-  balanced: {
-    label: 'Balanced',
-    eligibility: { consumer: true, mortgage: true },
-    weights: { consumer: 0.5, mortgage: 0.5 }
-  },
-  'consumer-focused': {
-    label: 'Consumer Focused',
-    eligibility: { consumer: true, mortgage: true },
-    weights: { consumer: 0.7, mortgage: 0.3 }
-  },
-  'consumer-only': {
-    label: 'Consumer Only',
-    eligibility: { consumer: true, mortgage: false },
-    weights: { consumer: 1.0, mortgage: 0.0 }
-  },
-  'mortgage-focused': {
-    label: 'Mortgage Focused',
-    eligibility: { consumer: true, mortgage: true },
-    weights: { consumer: 0.3, mortgage: 0.7 }
-  },
-  'mortgage-only': {
-    label: 'Mortgage Only',
-    eligibility: { consumer: false, mortgage: true },
-    weights: { consumer: 0.0, mortgage: 1.0 }
-  },
-  custom: {
-    label: 'Custom',
-    eligibility: { consumer: true, mortgage: true },
-    weights: { consumer: 0.5, mortgage: 0.5 }
+function setFocusWeightSettingsMessage(text = '', tone = 'warning') {
+  if (!focusWeightSettingsMessageEl) {
+    return;
   }
-};
+  focusWeightSettingsMessageEl.textContent = text;
+  focusWeightSettingsMessageEl.dataset.tone = text ? tone : '';
+}
+
+function syncFocusWeightSummary() {
+  if (!focusWeightActiveSummaryEl) {
+    return;
+  }
+  const weights = getSavedFocusWeights();
+  focusWeightActiveSummaryEl.textContent = `Active focus weights — Consumer-Focused C/M: ${weights.consumerFocused.consumer}/${weights.consumerFocused.mortgage} · Mortgage-Focused M/C: ${weights.mortgageFocused.mortgage}/${weights.mortgageFocused.consumer}`;
+}
+
+function syncFocusWeightInputsFromSettings() {
+  const weights = getSavedFocusWeights();
+  if (consumerFocusedPrimaryInput) {
+    consumerFocusedPrimaryInput.value = String(weights.consumerFocused.consumer);
+  }
+  if (consumerFocusedSecondaryInput) {
+    consumerFocusedSecondaryInput.value = String(weights.consumerFocused.mortgage);
+  }
+  if (mortgageFocusedPrimaryInput) {
+    mortgageFocusedPrimaryInput.value = String(weights.mortgageFocused.mortgage);
+  }
+  if (mortgageFocusedSecondaryInput) {
+    mortgageFocusedSecondaryInput.value = String(weights.mortgageFocused.consumer);
+  }
+}
+
+function refreshFocusWeightSettingsState() {
+  OFFICER_CLASS_PRESETS = buildOfficerClassPresets();
+  syncFocusWeightSummary();
+  syncFocusWeightInputsFromSettings();
+}
+
+function getSavedFocusWeights() {
+  return focusWeightSettingsService?.getSavedFocusWeights?.() || {
+    consumerFocused: { consumer: 70, mortgage: 30 },
+    mortgageFocused: { consumer: 30, mortgage: 70 }
+  };
+}
+
+function buildOfficerClassPresets() {
+  const focusWeights = getSavedFocusWeights();
+  return {
+    balanced: {
+      label: 'Balanced',
+      eligibility: { consumer: true, mortgage: true },
+      weights: { consumer: 0.5, mortgage: 0.5 }
+    },
+    'consumer-focused': {
+      label: 'Consumer Focused',
+      eligibility: { consumer: true, mortgage: true },
+      weights: {
+        consumer: fromPercentWeight(focusWeights.consumerFocused.consumer),
+        mortgage: fromPercentWeight(focusWeights.consumerFocused.mortgage)
+      }
+    },
+    'consumer-only': {
+      label: 'Consumer Only',
+      eligibility: { consumer: true, mortgage: false },
+      weights: { consumer: 1.0, mortgage: 0.0 }
+    },
+    'mortgage-focused': {
+      label: 'Mortgage Focused',
+      eligibility: { consumer: true, mortgage: true },
+      weights: {
+        consumer: fromPercentWeight(focusWeights.mortgageFocused.consumer),
+        mortgage: fromPercentWeight(focusWeights.mortgageFocused.mortgage)
+      }
+    },
+    'mortgage-only': {
+      label: 'Mortgage Only',
+      eligibility: { consumer: false, mortgage: true },
+      weights: { consumer: 0.0, mortgage: 1.0 }
+    },
+    custom: {
+      label: 'Custom',
+      eligibility: { consumer: true, mortgage: true },
+      weights: { consumer: 0.5, mortgage: 0.5 }
+    }
+  };
+}
+
+let OFFICER_CLASS_PRESETS = buildOfficerClassPresets();
 
 function toPercentWeight(weight) {
   return Math.round((Number(weight) || 0) * 100);
@@ -1020,8 +1085,14 @@ function getClassCodeForRow(row) {
 function getClassPresetFromConfig(eligibility, weights) {
   const normalizedEligibility = loanCategoryUtils.normalizeOfficerEligibility(eligibility);
   const normalizedWeights = loanCategoryUtils.normalizeOfficerWeights(weights, normalizedEligibility);
-  const roundedConsumer = Number(weights.consumer.toFixed(2));
-  const roundedMortgage = Number(weights.mortgage.toFixed(2));
+  const roundedConsumer = Number(normalizedWeights.consumer.toFixed(2));
+  const roundedMortgage = Number(normalizedWeights.mortgage.toFixed(2));
+  const consumerFocusedPreset = OFFICER_CLASS_PRESETS['consumer-focused'] || OFFICER_CLASS_PRESETS.balanced;
+  const mortgageFocusedPreset = OFFICER_CLASS_PRESETS['mortgage-focused'] || OFFICER_CLASS_PRESETS.balanced;
+  const consumerFocusedConsumer = Number(consumerFocusedPreset.weights.consumer.toFixed(2));
+  const consumerFocusedMortgage = Number(consumerFocusedPreset.weights.mortgage.toFixed(2));
+  const mortgageFocusedConsumer = Number(mortgageFocusedPreset.weights.consumer.toFixed(2));
+  const mortgageFocusedMortgage = Number(mortgageFocusedPreset.weights.mortgage.toFixed(2));
 
   if (!normalizedEligibility.consumer && normalizedEligibility.mortgage && roundedConsumer === 0 && roundedMortgage === 1) {
     return 'mortgage-only';
@@ -1032,10 +1103,10 @@ function getClassPresetFromConfig(eligibility, weights) {
   if (roundedConsumer === 0.5 && roundedMortgage === 0.5) {
     return 'balanced';
   }
-  if (roundedConsumer === 0.7 && roundedMortgage === 0.3 && normalizedEligibility.consumer && normalizedEligibility.mortgage) {
+  if (roundedConsumer === consumerFocusedConsumer && roundedMortgage === consumerFocusedMortgage && normalizedEligibility.consumer && normalizedEligibility.mortgage) {
     return 'consumer-focused';
   }
-  if (roundedConsumer === 0.3 && roundedMortgage === 0.7 && normalizedEligibility.consumer && normalizedEligibility.mortgage) {
+  if (roundedConsumer === mortgageFocusedConsumer && roundedMortgage === mortgageFocusedMortgage && normalizedEligibility.consumer && normalizedEligibility.mortgage) {
     return 'mortgage-focused';
   }
   return 'custom';
@@ -1126,6 +1197,23 @@ function closeLoanTypeEditorModal() {
   if (loanTypeEditorModalEl) {
     loanTypeEditorModalEl.hidden = true;
   }
+}
+
+function normalizeFocusPercentInput(value, fallback = 70) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(100, Math.max(0, Math.round(parsed)));
+}
+
+function syncFocusWeightPair(changedInput, pairedInput, fallback) {
+  if (!changedInput || !pairedInput) {
+    return;
+  }
+  const primary = normalizeFocusPercentInput(changedInput.value, fallback);
+  changedInput.value = String(primary);
+  pairedInput.value = String(100 - primary);
 }
 
 function openLoanTypeEditorModal(loanType) {
@@ -4964,6 +5052,63 @@ loanImportModalEl?.addEventListener('click', (event) => {
   }
 });
 officerEditorClassSelect?.addEventListener('change', syncOfficerEditorFromClassPreset);
+consumerFocusedPrimaryInput?.addEventListener('input', () => {
+  syncFocusWeightPair(consumerFocusedPrimaryInput, consumerFocusedSecondaryInput, 70);
+});
+consumerFocusedSecondaryInput?.addEventListener('input', () => {
+  syncFocusWeightPair(consumerFocusedSecondaryInput, consumerFocusedPrimaryInput, 30);
+});
+mortgageFocusedPrimaryInput?.addEventListener('input', () => {
+  syncFocusWeightPair(mortgageFocusedPrimaryInput, mortgageFocusedSecondaryInput, 70);
+});
+mortgageFocusedSecondaryInput?.addEventListener('input', () => {
+  syncFocusWeightPair(mortgageFocusedSecondaryInput, mortgageFocusedPrimaryInput, 30);
+});
+saveFocusWeightsBtn?.addEventListener('click', () => {
+  const consumerConsumer = normalizeFocusPercentInput(consumerFocusedPrimaryInput?.value, 70);
+  const mortgageMortgage = normalizeFocusPercentInput(mortgageFocusedPrimaryInput?.value, 70);
+  const saveResult = focusWeightSettingsService?.saveFocusWeights?.({
+    consumerFocused: {
+      consumer: consumerConsumer,
+      mortgage: 100 - consumerConsumer
+    },
+    mortgageFocused: {
+      mortgage: mortgageMortgage,
+      consumer: 100 - mortgageMortgage
+    }
+  });
+
+  if (!saveResult?.success) {
+    const storageFailureMessage = saveResult?.error === 'readback_mismatch'
+      ? 'Could not verify that focus weights were persisted. Changes may be temporary for this session only.'
+      : 'Could not persist focus weights in this browser. Changes may be temporary for this session only.';
+    setFocusWeightSettingsMessage(storageFailureMessage, 'warning');
+    return;
+  }
+
+  refreshFocusWeightSettingsState();
+  syncOfficerEditorFromClassPreset();
+  setFocusWeightSettingsMessage('Focus weights saved. New Consumer-Focused and Mortgage-Focused assignments will use these values.', 'success');
+});
+resetFocusWeightsBtn?.addEventListener('click', () => {
+  const defaults = focusWeightSettingsService?.getDefaultFocusWeights?.() || {
+    consumerFocused: { consumer: 70, mortgage: 30 },
+    mortgageFocused: { consumer: 30, mortgage: 70 }
+  };
+  const saveResult = focusWeightSettingsService?.saveFocusWeights?.(defaults);
+  if (!saveResult?.success) {
+    const storageFailureMessage = saveResult?.error === 'readback_mismatch'
+      ? 'Focus weights were reset for this session, but persistence could not be verified.'
+      : 'Focus weights were reset for this session, but could not be persisted in this browser.';
+    setFocusWeightSettingsMessage(storageFailureMessage, 'warning');
+    refreshFocusWeightSettingsState();
+    syncOfficerEditorFromClassPreset();
+    return;
+  }
+  refreshFocusWeightSettingsState();
+  syncOfficerEditorFromClassPreset();
+  setFocusWeightSettingsMessage('Focus weights reset to defaults (70/30).', 'success');
+});
 loanTypeEditorAvailabilityInput?.addEventListener('change', syncLoanTypeEditorAvailability);
 closeLoanTypeEditorModalBtn?.addEventListener('click', closeLoanTypeEditorModal);
 cancelLoanTypeEditorBtn?.addEventListener('click', closeLoanTypeEditorModal);
@@ -5219,6 +5364,8 @@ clearBtn.addEventListener('click', () => {
 });
 
 (async function initializeApp() {
+  refreshFocusWeightSettingsState();
+  updateFairnessMethodologyCopy();
   renderLoanTypes();
 
   if (distributionChartsEl) {

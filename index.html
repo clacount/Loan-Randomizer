@@ -29,6 +29,7 @@
           <option value="officer_lane">Officer Lane Fairness</option>
         </select>
         <p id="fairnessModelHint" class="hint fairness-model-hint">Global Fairness compares all officers more evenly across total opportunity.</p>
+        <p id="focusWeightActiveSummary" class="hint focus-weight-active-summary">Active focus weights — Consumer-Focused C/M: 70/30 · Mortgage-Focused M/C: 70/30</p>
       </div>
     </div>
   </header>
@@ -75,7 +76,7 @@
         <div class="loan-type-details-body">
           <div id="step2Message" class="message" aria-live="polite"></div>
           <div class="type-manager-form">
-            <input id="loanTypeNameInput" type="text" placeholder="Loan type name" />
+            <input id="loanTypeNameInput" type="text" placeholder="Please enter a loan type name" />
             <input id="loanTypeStartInput" type="date" />
             <input id="loanTypeEndInput" type="date" />
             <button id="addLoanTypeBtn" type="button">Add Loan Type</button>
@@ -90,9 +91,41 @@
         <h2>Step 3: Enter Loan Officers and Loans</h2>
         <p class="hint">Set up the people receiving loans and the loans that need to be assigned.</p>
         <p class="class-note">
-          Loan Officer Class: <strong>C</strong> = Consumer, <strong>M</strong> = Mortgage, and <strong>F</strong> = Flex (Consumer + HELOC).
+          <strong>Loan Officer Class</strong>: <strong>C</strong> = Consumer, <strong>M</strong> = Mortgage, and <strong>F</strong> = Flex (Consumer + HELOC).
+        </p>
+        <p class="class-note">
+          <strong>Focus Weights</strong>: Focus Weights control the assignment balance for Flex officers who can handle both Consumer and Mortgage loans.
+          Adjusting these weights changes how strongly the system favors one loan lane over the other.
         </p>
       </div>
+      <details class="focus-weight-settings focus-weight-settings-step3">
+        <summary>Focus weight settings</summary>
+        <div class="focus-weight-grid">
+          <label>
+            <span>Consumer-Focused consumer weight (%)</span>
+            <input id="consumerFocusedPrimaryInput" type="number" min="0" max="100" step="1" />
+          </label>
+          <label>
+            <span>Consumer-Focused mortgage weight (%)</span>
+            <input id="consumerFocusedSecondaryInput" type="number" min="0" max="100" step="1" />
+          </label>
+          <p class="hint full-width">Consumer-Focused favors consumer weighting over mortgage weighting.</p>
+          <label>
+            <span>Mortgage-Focused mortgage weight (%)</span>
+            <input id="mortgageFocusedPrimaryInput" type="number" min="0" max="100" step="1" />
+          </label>
+          <label>
+            <span>Mortgage-Focused consumer weight (%)</span>
+            <input id="mortgageFocusedSecondaryInput" type="number" min="0" max="100" step="1" />
+          </label>
+          <p class="hint full-width">Mortgage-Focused favors mortgage weighting over consumer weighting.</p>
+        </div>
+        <div class="focus-weight-actions">
+          <button id="resetFocusWeightsBtn" type="button">Reset to defaults</button>
+          <button id="saveFocusWeightsBtn" class="primary" type="button">Save focus weights</button>
+        </div>
+        <div id="focusWeightSettingsMessage" class="message" aria-live="polite"></div>
+      </details>
       <div id="step3Message" class="message" aria-live="polite"></div>
       <div class="step-grid">
         <section class="step-panel">
@@ -261,7 +294,7 @@
     <div class="simulation-form-grid">
       <label class="full-width">
         <span>Name</span>
-        <input id="officerEditorNameInput" type="text" placeholder="Loan officer name" />
+        <input id="officerEditorNameInput" type="text" placeholder="Please enter loan officer name" />
       </label>
       <label class="full-width">
         <span>Class</span>
@@ -429,6 +462,7 @@
 <script src="src/utils/loanCategoryUtils.js"></script>
 <script src="src/services/fairnessEngineService.js"></script>
 <script src="src/services/fairnessDisplayService.js"></script>
+<script src="src/services/focusWeightSettingsService.js"></script>
 <script src="src/services/officerLaneOptimizationService.js"></script>
 <script src="src/ui/renderers/distributionChartRenderer.js"></script>
 <script src="src/ui/views/fairnessView.js"></script>
