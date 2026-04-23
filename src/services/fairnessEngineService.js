@@ -497,7 +497,7 @@
       };
     } else if (hasMortgageLane && flexParticipationViolation) {
       statusMetricDescriptor = {
-        key: 'flex_participation_policy',
+        key: 'mortgage_flex_participation_policy',
         label: 'Flex mortgage participation policy',
         valuePercent: mortgageRoutingShareToM * 100,
         contextLabel: 'Mortgage lane policy checks'
