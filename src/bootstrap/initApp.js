@@ -356,15 +356,15 @@ function getOfficerStatsFromResult(result) {
 function evaluateResultFairness(result) {
   const officers = result.officersUsed || [];
   const officerStats = getOfficerStatsFromResult(result);
+  const parsedHelocWeightedVariancePercent = Number(result?.optimizationFinalHelocWeightedVariancePercent);
+  const optimizationMetrics = Number.isFinite(parsedHelocWeightedVariancePercent)
+    ? { helocWeightedVariancePercent: parsedHelocWeightedVariancePercent }
+    : {};
   return fairnessEngineService.evaluateFairness({
     engineType: getSelectedFairnessEngine(),
     officers,
     officerStats,
-    optimizationMetrics: {
-      helocWeightedVariancePercent: Number.isFinite(Number(result?.optimizationFinalHelocWeightedVariancePercent))
-        ? Number(result.optimizationFinalHelocWeightedVariancePercent)
-        : Number(result?.optimizationFinalConsumerDollarVariance)
-    }
+    optimizationMetrics
   });
 }
 
@@ -4821,26 +4821,17 @@ function getLaneOptimizationCompositePercent(countVariancePercent, amountVarianc
 
 
 function isHomogeneousHelocSupportPool(cleanLoans, officersByName) {
-  if (!Array.isArray(cleanLoans) || !cleanLoans.length) {
-    return false;
-  }
-
-  const allHeloc = cleanLoans.every((loan) => getMortgageLoanPermissionLevel(loan.type) === 'heloc');
-  if (!allHeloc) {
+  if (!fairnessEngineService?.isHomogeneousHelocSupportPool || !Array.isArray(cleanLoans) || !cleanLoans.length) {
     return false;
   }
 
   const officerConfigs = Object.values(officersByName || {}).map((officer) => normalizeOfficerConfig(officer));
-  const mortgageOnlyCount = officerConfigs.filter((officer) => {
-    const eligibility = loanCategoryUtils.normalizeOfficerEligibility(officer?.eligibility);
-    return !eligibility.consumer && eligibility.mortgage;
-  }).length;
-  const flexCount = officerConfigs.filter((officer) => {
-    const eligibility = loanCategoryUtils.normalizeOfficerEligibility(officer?.eligibility);
-    return eligibility.consumer && eligibility.mortgage;
-  }).length;
-
-  return mortgageOnlyCount >= 1 && flexCount >= 2;
+  const normalizedLoanTypes = cleanLoans.map((loan) => getMortgageLoanPermissionLevel(loan.type));
+  return fairnessEngineService.isHomogeneousHelocSupportPool({
+    officers: officerConfigs,
+    hasConsumerLoans: false,
+    loanTypeNames: normalizedLoanTypes
+  });
 }
 
 function getHomogeneousHelocWeightedVariancePercent({ loanToOfficerMap, cleanLoans, cleanOfficerNames, officersByName }) {
@@ -4935,7 +4926,7 @@ function optimizeOfficerLaneAssignmentsResult({ activeLoanTypes, cleanLoans, cle
 
   const optimizationTarget = isHelocOnlySupportPool
     ? {
-      getVariancePercent: (fairnessEvaluation) => Number(fairnessEvaluation?.metrics?.helocWeightedVariancePercent || 0),
+      getVariancePercent: (fairnessEvaluation) => fairnessEvaluation?.metrics?.helocWeightedVariancePercent,
       targetLabel: 'weighted HELOC variance',
       shouldOptimizeLoan: (loan) => getMortgageLoanPermissionLevel(loan.type) === 'heloc'
     }

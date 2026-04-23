@@ -184,6 +184,31 @@ test('Scenario 1 HELOC-only: meaningful flex participation with M advantage and 
   assert.equal(assignmentSummary.M1.count < 8, true);
 });
 
+test('Scenario 1b HELOC-only with one flex and one mortgage-only uses shared support logic end-to-end', () => {
+  const context = loadAppContext();
+  const officers = [
+    { name: 'F1', eligibility: { consumer: true, mortgage: true }, weights: { consumer: 0.7, mortgage: 0.3 } },
+    { name: 'M1', eligibility: { consumer: false, mortgage: true }, weights: { consumer: 0, mortgage: 1 } }
+  ];
+  const loans = Array.from({ length: 4 }, (_, index) => ({
+    name: `H1b-${index + 1}`,
+    type: 'HELOC',
+    amountRequested: 100000
+  }));
+
+  const result = context.assignLoans(officers, loans, { officers: {} });
+  const weightedVariance = Number(result.optimizationFinalHelocWeightedVariancePercent);
+  const summaryText = (result.fairnessEvaluation?.summaryItems || []).join(' | ');
+
+  assert.equal(Number.isFinite(weightedVariance), true);
+  assert.equal(result.fairnessEvaluation?.roleAwareFlags?.helocOnlySupportThresholdsApplied, true);
+  assert.equal(result.fairnessEvaluation?.statusMetricDescriptor?.key, 'heloc_weighted_variance');
+  assert.equal(result.fairnessEvaluation?.metrics?.helocWeightedVariancePercent, weightedVariance);
+  assert.equal(summaryText.includes('Weighted HELOC optimization variance: n/a%'), false);
+  assert.equal(summaryText.includes(`Weighted HELOC optimization variance: ${weightedVariance.toFixed(1)}%`), true);
+  assert.equal(result.fairnessEvaluation?.overallResult, 'PASS');
+});
+
 test('Scenario 2 mixed pool: consumer-first flex behavior, M-led full mortgage, HELOC sharing when possible', () => {
   const context = loadAppContext();
   const officers = [

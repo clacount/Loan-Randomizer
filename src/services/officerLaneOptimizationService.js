@@ -23,10 +23,12 @@
 
   function getTargetVariancePercent(fairnessEvaluation = {}, getVariancePercent) {
     if (typeof getVariancePercent === 'function') {
-      return Number(getVariancePercent(fairnessEvaluation)) || 0;
+      const targetVariancePercent = Number(getVariancePercent(fairnessEvaluation));
+      return Number.isFinite(targetVariancePercent) ? targetVariancePercent : Number.POSITIVE_INFINITY;
     }
 
-    return Number(fairnessEvaluation?.metrics?.consumerVariance?.maxAmountVariancePercent) || 0;
+    const defaultVariancePercent = Number(fairnessEvaluation?.metrics?.consumerVariance?.maxAmountVariancePercent);
+    return Number.isFinite(defaultVariancePercent) ? defaultVariancePercent : Number.POSITIVE_INFINITY;
   }
 
   function scoreFairness(fairnessEvaluation = {}) {

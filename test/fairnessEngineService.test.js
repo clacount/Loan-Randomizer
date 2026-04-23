@@ -70,10 +70,37 @@ test('homogeneous HELOC support pool can PASS with specialized thresholds and we
   assert.ok(evaluation.metrics.flexVariance.maxCountVariancePercent > 15, 'Would fail old generic 15% count threshold.');
   assert.equal(evaluation.overallResult, 'PASS');
   assert.equal(evaluation.roleAwareFlags.helocOnlySupportThresholdsApplied, true);
+  assert.equal(evaluation.metrics.helocWeightedVariancePercent, 12.6);
   assert.equal(evaluation.statusMetricDescriptor?.key, 'heloc_weighted_variance');
   assert.equal(evaluation.statusMetricDescriptor?.label, 'Weighted HELOC variance');
   assert.equal(evaluation.statusMetricDescriptor?.valuePercent, 12.6);
   assert.match(evaluation.summaryItems.join(' | '), /HELOC-only support thresholds applied/i);
+});
+
+test('fairness metrics keep HELOC weighted variance null when optimization metric is absent', () => {
+  const evaluation = global.FairnessEngineService.evaluateFairness({
+    engineType: 'officer_lane',
+    officers: [
+      { name: 'F1', eligibility: { consumer: true, mortgage: true } },
+      { name: 'M1', eligibility: { consumer: false, mortgage: true } }
+    ],
+    officerStats: [
+      { officer: 'F1', totalLoans: 1, totalAmount: 100, consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 1, mortgageAmount: 100, typeBreakdown: { HELOC: 1 } },
+      { officer: 'M1', totalLoans: 1, totalAmount: 100, consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 1, mortgageAmount: 100, typeBreakdown: { HELOC: 1 } }
+    ]
+  });
+
+  assert.equal(global.FairnessEngineService.isHomogeneousHelocSupportPool({
+    officers: [
+      { name: 'F1', eligibility: { consumer: true, mortgage: true } },
+      { name: 'M1', eligibility: { consumer: false, mortgage: true } }
+    ],
+    hasConsumerLoans: false,
+    loanTypeNames: ['heloc']
+  }), true);
+  assert.equal(evaluation.roleAwareFlags.helocOnlySupportThresholdsApplied, true);
+  assert.equal(evaluation.metrics.helocWeightedVariancePercent, null);
+  assert.equal(evaluation.statusMetricDescriptor?.valuePercent, null);
 });
 
 test('homogeneous HELOC support pool remains REVIEW when flex variance exceeds 25%', () => {
