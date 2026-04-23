@@ -420,6 +420,9 @@
     const flexParticipationMeaningful = flexMortgageParticipationCount > 0;
     const mortgageOfficerLoanCounts = mortgageOfficers.map((officerName) => Number((officerStats.find((entry) => entry.officer === officerName)?.mortgageLoanCount) || 0));
     const flexOfficerLoanCounts = flexOfficers.map((officerName) => Number((officerStats.find((entry) => entry.officer === officerName)?.mortgageLoanCount) || 0));
+    const mortgageLoanCountForM = mortgageOfficerLoanCounts.reduce((sum, count) => sum + count, 0);
+    const totalMortgageLoanCount = mortgageLoanCountForM + flexOfficerLoanCounts.reduce((sum, count) => sum + count, 0);
+    const mortgageLoanCountShareToM = totalMortgageLoanCount ? (mortgageLoanCountForM / totalMortgageLoanCount) : 1;
     const maxMortgageOfficerLoanCount = mortgageOfficerLoanCounts.length ? Math.max(...mortgageOfficerLoanCounts) : 0;
     const maxFlexOfficerLoanCount = flexOfficerLoanCounts.length ? Math.max(...flexOfficerLoanCounts) : 0;
     const mortgageLeadershipPreserved = !hasMortgageLane || maxMortgageOfficerLoanCount >= maxFlexOfficerLoanCount;
@@ -492,7 +495,7 @@
       statusMetricDescriptor = {
         key: 'mortgage_leadership_policy',
         label: 'Mortgage leadership preservation',
-        valuePercent: mortgageRoutingShareToM * 100,
+        valuePercent: mortgageLoanCountShareToM * 100,
         contextLabel: 'Mortgage lane policy checks'
       };
     } else if (hasMortgageLane && flexParticipationViolation) {
