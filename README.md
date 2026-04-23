@@ -68,7 +68,7 @@ The app also keeps a CSV state file named `loan-randomizer-running-totals.csv` i
   - `getAccessTokenWithPkceStub()`
   - `uploadFileToSharePointStub(...)`
 - This scaffold is intentionally non-functional for production auth/upload. It is a safe handoff point for IT/dev teams to wire tenant-specific Microsoft Graph auth and library upload logic.
-- For a non-programmer rollout checklist, use `docs/GRAPH-SETUP-EILI5.md`.
+- For a non-programmer rollout checklist, use `docs/GRAPH-SETUP.md`.
 
 
 ## New history and PDF features

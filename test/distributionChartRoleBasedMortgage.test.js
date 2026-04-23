@@ -187,3 +187,30 @@ test('role-based mortgage dollar donut includes flex mortgage participation and 
   assert.ok(noteTexts.some((text) => text.includes('Distribution share view: this donut is composition only; fairness status is based on lane variance metrics.')));
   assert.ok(noteTexts.some((text) => text.includes('Officers with zero mortgage-category dollars are excluded from this mortgage lane chart.')));
 });
+
+test('mortgage flex participation descriptor is treated as mortgage-lane driven in parity notes', () => {
+  const context = loadAppContext();
+  const evaluation = context.FairnessEngineService.evaluateFairness({
+    engineType: 'officer_lane',
+    officers: [
+      { name: 'M1', eligibility: { consumer: false, mortgage: true } },
+      { name: 'F1', eligibility: { consumer: true, mortgage: true } }
+    ],
+    officerStats: [
+      { officer: 'M1', totalLoans: 6, totalAmount: 600000, consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 6, mortgageAmount: 600000, typeBreakdown: { 'Home Refi': 6 } },
+      { officer: 'F1', totalLoans: 1, totalAmount: 100000, consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 1, mortgageAmount: 100000, typeBreakdown: { 'Home Refi': 1 } }
+    ]
+  });
+  assert.equal(evaluation.overallResult, 'REVIEW');
+  assert.equal(evaluation.statusMetricDescriptor?.key, 'mortgage_flex_participation_policy');
+
+  const parityNotes = context.getOfficerLaneChartParityNotes({
+    chartLane: 'mortgage',
+    fairnessEvaluation: evaluation
+  });
+
+  assert.match(parityNotes.statusMetricLine, /Flex mortgage participation policy/);
+  assert.match(parityNotes.statusMetricLine, /Mortgage lane policy checks/);
+  assert.match(parityNotes.alignmentLine, /mortgage policy check/i);
+  assert.doesNotMatch(parityNotes.alignmentLine, /driven by flex-lane variance/i);
+});

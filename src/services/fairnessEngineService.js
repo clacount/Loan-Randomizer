@@ -420,6 +420,9 @@
     const flexParticipationMeaningful = flexMortgageParticipationCount > 0;
     const mortgageOfficerLoanCounts = mortgageOfficers.map((officerName) => Number((officerStats.find((entry) => entry.officer === officerName)?.mortgageLoanCount) || 0));
     const flexOfficerLoanCounts = flexOfficers.map((officerName) => Number((officerStats.find((entry) => entry.officer === officerName)?.mortgageLoanCount) || 0));
+    const mortgageLoanCountForM = mortgageOfficerLoanCounts.reduce((sum, count) => sum + count, 0);
+    const totalMortgageLoanCount = mortgageLoanCountForM + flexOfficerLoanCounts.reduce((sum, count) => sum + count, 0);
+    const mortgageLoanCountShareToM = totalMortgageLoanCount ? (mortgageLoanCountForM / totalMortgageLoanCount) : 1;
     const maxMortgageOfficerLoanCount = mortgageOfficerLoanCounts.length ? Math.max(...mortgageOfficerLoanCounts) : 0;
     const maxFlexOfficerLoanCount = flexOfficerLoanCounts.length ? Math.max(...flexOfficerLoanCounts) : 0;
     const mortgageLeadershipPreserved = !hasMortgageLane || maxMortgageOfficerLoanCount >= maxFlexOfficerLoanCount;
@@ -474,6 +477,34 @@
         valuePercent: Number(categoryMetrics.consumerVariance.maxAmountVariancePercent) || 0,
         contextLabel: 'Consumer lane thresholds'
       };
+    } else if (hasMortgageLane && !adjustedMortgageLanePass) {
+      statusMetricDescriptor = {
+        key: 'mortgage_lane_dollar_variance',
+        label: 'Mortgage lane dollar variance',
+        valuePercent: Number(categoryMetrics.mortgageVariance.maxAmountVariancePercent) || 0,
+        contextLabel: 'Mortgage lane thresholds'
+      };
+    } else if (hasMortgageLane && !mortgageRoutingPass) {
+      statusMetricDescriptor = {
+        key: 'mortgage_routing_policy',
+        label: 'Mortgage routing share to M officers',
+        valuePercent: mortgageRoutingShareToM * 100,
+        contextLabel: 'Mortgage lane policy checks'
+      };
+    } else if (hasMortgageLane && !mortgageLeadershipPreserved) {
+      statusMetricDescriptor = {
+        key: 'mortgage_leadership_policy',
+        label: 'Mortgage leadership preservation',
+        valuePercent: mortgageLoanCountShareToM * 100,
+        contextLabel: 'Mortgage lane policy checks'
+      };
+    } else if (hasMortgageLane && flexParticipationViolation) {
+      statusMetricDescriptor = {
+        key: 'mortgage_flex_participation_policy',
+        label: 'Flex mortgage participation policy',
+        valuePercent: mortgageRoutingShareToM * 100,
+        contextLabel: 'Mortgage lane policy checks'
+      };
     } else if (hasFlexLane && !adjustedFlexLanePass) {
       statusMetricDescriptor = {
         key: 'flex_lane_dollar_variance',
@@ -494,6 +525,13 @@
         label: 'Flex lane dollar variance',
         valuePercent: Number(categoryMetrics.flexVariance.maxAmountVariancePercent) || 0,
         contextLabel: 'Flex lane thresholds'
+      };
+    } else if (hasMortgageLane) {
+      statusMetricDescriptor = {
+        key: 'mortgage_lane_dollar_variance',
+        label: 'Mortgage lane dollar variance',
+        valuePercent: Number(categoryMetrics.mortgageVariance.maxAmountVariancePercent) || 0,
+        contextLabel: 'Mortgage lane thresholds'
       };
     }
 

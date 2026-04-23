@@ -172,3 +172,54 @@ test('homogeneous HELOC support pool remains REVIEW when M leadership policy fai
 
   assert.equal(evaluation.overallResult, 'REVIEW');
 });
+
+test('mortgage leadership descriptor value uses mortgage loan-count share, not mortgage dollar share', () => {
+  const evaluation = global.FairnessEngineService.evaluateFairness({
+    engineType: 'officer_lane',
+    officers: [
+      { name: 'M1', eligibility: { consumer: false, mortgage: true } },
+      { name: 'F1', eligibility: { consumer: true, mortgage: true } },
+      { name: 'F2', eligibility: { consumer: true, mortgage: true } }
+    ],
+    officerStats: [
+      {
+        officer: 'M1',
+        totalLoans: 2,
+        totalAmount: 900000,
+        consumerLoanCount: 0,
+        consumerAmount: 0,
+        mortgageLoanCount: 2,
+        mortgageAmount: 900000,
+        typeBreakdown: { 'Home Refi': 2 }
+      },
+      {
+        officer: 'F1',
+        totalLoans: 3,
+        totalAmount: 100000,
+        consumerLoanCount: 0,
+        consumerAmount: 0,
+        mortgageLoanCount: 3,
+        mortgageAmount: 100000,
+        typeBreakdown: { 'Home Refi': 3 }
+      },
+      {
+        officer: 'F2',
+        totalLoans: 0,
+        totalAmount: 0,
+        consumerLoanCount: 0,
+        consumerAmount: 0,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        typeBreakdown: {}
+      }
+    ]
+  });
+
+  const expectedCountSharePercent = (2 / 5) * 100;
+  const mortgageRoutingSharePercent = (900000 / 1000000) * 100;
+
+  assert.equal(evaluation.overallResult, 'REVIEW');
+  assert.equal(evaluation.statusMetricDescriptor?.key, 'mortgage_leadership_policy');
+  assert.equal(evaluation.statusMetricDescriptor?.valuePercent, expectedCountSharePercent);
+  assert.notEqual(evaluation.statusMetricDescriptor?.valuePercent, mortgageRoutingSharePercent);
+});
