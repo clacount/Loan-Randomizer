@@ -211,6 +211,6 @@ test('mortgage flex participation descriptor is treated as mortgage-lane driven 
 
   assert.match(parityNotes.statusMetricLine, /Flex mortgage participation policy/);
   assert.match(parityNotes.statusMetricLine, /Mortgage lane policy checks/);
-  assert.match(parityNotes.alignmentLine, /same lane metric/i);
+  assert.match(parityNotes.alignmentLine, /mortgage policy check/i);
   assert.doesNotMatch(parityNotes.alignmentLine, /driven by flex-lane variance/i);
 });

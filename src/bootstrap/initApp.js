@@ -2347,7 +2347,7 @@ function getOfficerLaneChartParityNotes({ fairnessEvaluation, chartLane }) {
         ? 'mortgage'
         : null;
   const alignmentLine = descriptorLane && descriptorLane === chartLane
-    ? `Composition view: This donut shows ${laneLabel}; status is using the same lane metric.`
+    ? `Composition view: This donut shows ${laneLabel}; status is using the mortgage policy check.`
     : descriptorLane
       ? `Composition view: This donut shows ${laneLabel}; PASS/REVIEW is currently driven by ${descriptorLane}-lane variance.`
       : `Composition view: This donut shows ${laneLabel}; PASS/REVIEW is currently driven by a specialized status basis.`;
