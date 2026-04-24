@@ -10,6 +10,7 @@ const ENGINE_VALUES = new Set(['global', 'officer_lane', 'both']);
 const REVIEW_SAMPLE_LIMIT = 10;
 const CONSUMER_LOAN_TYPES = ['Personal', 'Auto', 'Credit Card', 'Collateralized'];
 const MORTGAGE_LOAN_TYPES = ['HELOC', 'First Mortgage', 'Home Refi'];
+let caseFileSequence = 0;
 const OFFICER_ROLE_CODES = Object.freeze({
   CONSUMER: 'C',
   FLEX: 'F',
@@ -658,6 +659,11 @@ function summarizeScenario(scenario) {
   };
 }
 
+function buildCaseFileName({ seed, engine }) {
+  caseFileSequence += 1;
+  return `${seed}_${engine}_${Date.now()}_${process.pid}_${caseFileSequence}.json`;
+}
+
 function runOneScenario(context, scenario, engine, engineSelection = null) {
   context.FairnessEngineService.setSelectedFairnessEngine(engine);
   const rawResult = context.assignLoans(scenario.officers, scenario.loans, scenario.runningTotals);
@@ -698,7 +704,7 @@ function runOneScenario(context, scenario, engine, engineSelection = null) {
 function writeCaseFile({ outputDir, seed, engine, scenario, result, reason, classification, runMetadata = {} }) {
   const casesDir = path.join(outputDir, 'cases');
   ensureDir(casesDir);
-  const fileName = `${seed}_${engine}_${Date.now()}.json`;
+  const fileName = buildCaseFileName({ seed, engine });
   const payload = {
     timestamp: nowIso(),
     classification,
