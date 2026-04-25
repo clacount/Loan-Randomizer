@@ -4557,6 +4557,23 @@ function getRunnerUpScoreForAuditEntry(entry, selectedOfficerScore) {
   return entry.scoredOfficers.find((score) => score?.officer !== selectedOfficerScore?.officer) || null;
 }
 
+function isGuardedAuditSelection(selectedOfficerScore) {
+  return Boolean(selectedOfficerScore?.globalDominationGuardApplied);
+}
+
+function getRawBestScoreForAuditEntry(entry) {
+  if (!Array.isArray(entry?.scoredOfficers) || !entry.scoredOfficers.length) {
+    return null;
+  }
+
+  return entry.scoredOfficers.reduce((best, candidate) => {
+    if (!best || candidate.score < best.score) {
+      return candidate;
+    }
+    return best;
+  }, null);
+}
+
 function getAuditReasonLabels(selectedOfficerScore, runnerUpScore, loanType) {
   if (!runnerUpScore) {
     return ['Only available officer'];
@@ -4595,6 +4612,8 @@ function buildAuditExplanation(entry) {
   const selectedOfficerScore = getSelectedOfficerScoreForAuditEntry(entry);
   const runnerUpScore = getRunnerUpScoreForAuditEntry(entry, selectedOfficerScore);
   const reasonLabels = getAuditReasonLabels(selectedOfficerScore, runnerUpScore, entry.loan.type);
+  const rawBestScore = getRawBestScoreForAuditEntry(entry);
+  const guardedSelection = isGuardedAuditSelection(selectedOfficerScore);
 
   if (!selectedOfficerScore) {
     return `${entry.selectedOfficer} was selected for this loan.`;
@@ -4602,6 +4621,14 @@ function buildAuditExplanation(entry) {
 
   if (!runnerUpScore) {
     return `${entry.selectedOfficer} was the only available officer for this loan.`;
+  }
+
+  if (guardedSelection) {
+    if (rawBestScore && rawBestScore.officer !== selectedOfficerScore.officer) {
+      return `Selected by the Global domination guard to avoid current-run concentration. ${rawBestScore.officer} had a lower raw score, but ${entry.selectedOfficer} was within the bounded guard range with fewer current-run assignments.`;
+    }
+
+    return 'Selected by the Global domination guard to avoid current-run concentration while staying within the bounded guard range.';
   }
 
   if (!reasonLabels.length) {
@@ -4613,17 +4640,23 @@ function buildAuditExplanation(entry) {
 
 function getAuditStatusLabel(entry, scoredOfficer, index) {
   const selectedOfficerScore = getSelectedOfficerScoreForAuditEntry(entry);
-  const selectedScoreValue = selectedOfficerScore?.score;
+  const rawBestScore = getRawBestScoreForAuditEntry(entry);
+  const guardedSelection = isGuardedAuditSelection(selectedOfficerScore);
+  const comparisonBaseScore = guardedSelection && rawBestScore ? rawBestScore.score : selectedOfficerScore?.score;
 
   if (scoredOfficer.officer === entry.selectedOfficer) {
-    return 'Chosen';
+    return guardedSelection ? 'Domination guard (chosen)' : 'Chosen';
+  }
+
+  if (guardedSelection && rawBestScore && scoredOfficer.officer === rawBestScore.officer) {
+    return `Raw score leader (guarded choice +${formatScoreGapPercent(rawBestScore.score, selectedOfficerScore?.score)})`;
   }
 
   if (index === 1) {
-    return `Next best (+${formatScoreGapPercent(selectedScoreValue, scoredOfficer.score)})`;
+    return `Next best (+${formatScoreGapPercent(comparisonBaseScore, scoredOfficer.score)})`;
   }
 
-  return `Behind winner (+${formatScoreGapPercent(selectedScoreValue, scoredOfficer.score)})`;
+  return `Behind winner (+${formatScoreGapPercent(comparisonBaseScore, scoredOfficer.score)})`;
 }
 
 function buildPdfLines(result, officers, loans, generatedAt) {

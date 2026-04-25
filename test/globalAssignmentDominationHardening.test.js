@@ -221,6 +221,23 @@ test('global mode seed-8 style HELOC scenario avoids avoidable all-to-one domina
     Number(guardAppliedEntry.scoredOfficers[0].score) >= Number(guardAppliedEntry.scoredOfficers[1]?.score),
     true
   );
+  const guardExplanation = context.buildAuditExplanation(guardAppliedEntry);
+  assert.equal(/Global domination guard/i.test(guardExplanation), true);
+  assert.equal(/avoid current-run concentration/i.test(guardExplanation), true);
+  assert.equal(/best overall balance/i.test(guardExplanation), false);
+  assert.equal(/0\\.0%/.test(guardExplanation), false);
+  assert.equal(
+    context.getAuditStatusLabel(guardAppliedEntry, guardAppliedEntry.scoredOfficers[0], 0),
+    'Domination guard (chosen)'
+  );
+  const rawScoreLeader = guardAppliedEntry.scoredOfficers.reduce((best, candidate) => (
+    !best || candidate.score < best.score ? candidate : best
+  ), null);
+  if (rawScoreLeader && rawScoreLeader.officer !== guardAppliedEntry.selectedOfficer) {
+    const rawScoreLeaderIndex = guardAppliedEntry.scoredOfficers.findIndex((candidate) => candidate.officer === rawScoreLeader.officer);
+    const rawLeaderLabel = context.getAuditStatusLabel(guardAppliedEntry, rawScoreLeader, rawScoreLeaderIndex);
+    assert.equal(rawLeaderLabel.startsWith('Raw score leader (guarded choice +'), true);
+  }
 
   const balancedEvaluation = context.FairnessEngineService.evaluateFairness({
     engineType: 'global',
