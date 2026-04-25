@@ -509,7 +509,22 @@ function isExpectedInvalidScenarioError(message) {
 }
 
 function getMetricForVarianceDescriptor(descriptorKey, metrics = {}) {
+  const globalCountVariance = metrics.maxCountVariancePercent;
+  const globalDollarVariance = metrics.maxAmountVariancePercent;
+  const globalCountNormalizedMargin = isFiniteNumber(globalCountVariance)
+    ? (globalCountVariance - 15) / 15
+    : null;
+  const globalDollarNormalizedMargin = isFiniteNumber(globalDollarVariance)
+    ? (globalDollarVariance - 20) / 20
+    : null;
+
   const varianceDescriptors = {
+    global_count_variance: globalCountVariance,
+    global_dollar_variance: globalDollarVariance,
+    global_count_and_dollar_variance:
+      isFiniteNumber(globalCountNormalizedMargin) && isFiniteNumber(globalDollarNormalizedMargin)
+        ? (globalCountNormalizedMargin >= globalDollarNormalizedMargin ? globalCountVariance : globalDollarVariance)
+        : null,
     consumer_lane_count_variance: metrics.consumerVariance?.maxCountVariancePercent,
     consumer_lane_dollar_variance: metrics.consumerVariance?.maxAmountVariancePercent,
     flex_lane_count_variance: metrics.flexVariance?.maxCountVariancePercent,
@@ -523,6 +538,9 @@ function getMetricForVarianceDescriptor(descriptorKey, metrics = {}) {
 
 function isVarianceDescriptorKey(descriptorKey) {
   return descriptorKey in {
+    global_count_variance: true,
+    global_dollar_variance: true,
+    global_count_and_dollar_variance: true,
     consumer_lane_count_variance: true,
     consumer_lane_dollar_variance: true,
     flex_lane_count_variance: true,
@@ -583,6 +601,29 @@ function collectValidationFlags({ scenario, engine, result, officerStats, contex
     if (isFiniteNumber(overallLoanVarianceSummary) && isFiniteNumber(metrics.maxCountVariancePercent)
       && Math.abs(overallLoanVarianceSummary - metrics.maxCountVariancePercent) > 0.2) {
       suspicious.push('summary/status contradiction on overall loan variance');
+    }
+
+    const descriptor = evalObj.statusMetricDescriptor;
+    if (!descriptor || typeof descriptor !== 'object') {
+      suspicious.push('missing statusMetricDescriptor for global');
+    } else {
+      const descriptorKey = descriptor.key;
+      const allowedGlobalDescriptorKeys = {
+        global_count_variance: true,
+        global_dollar_variance: true,
+        global_count_and_dollar_variance: true
+      };
+      if (!allowedGlobalDescriptorKeys[descriptorKey]) {
+        suspicious.push('statusMetricDescriptor key invalid for global');
+      }
+
+      const metricUsed = getMetricForVarianceDescriptor(descriptorKey, metrics);
+      if (descriptor.valuePercent !== null
+        && descriptor.valuePercent !== undefined
+        && isFiniteNumber(metricUsed)
+        && Math.abs(Number(descriptor.valuePercent) - Number(metricUsed)) > 0.2) {
+        suspicious.push('statusMetricDescriptor inconsistent with actual result basis');
+      }
     }
   } else {
     const descriptor = evalObj.statusMetricDescriptor;
@@ -863,7 +904,7 @@ function classifyReviewBasis(run = {}, engine = 'global') {
   const fairnessEvaluation = run?.result?.fairnessEvaluation || {};
   const metrics = fairnessEvaluation.metrics || {};
   if (engine === 'global') {
-    return classifyGlobalReviewBasis(metrics);
+    return fairnessEvaluation?.statusMetricDescriptor?.key || classifyGlobalReviewBasis(metrics);
   }
   return classifyOfficerLaneReviewBasis(fairnessEvaluation);
 }
