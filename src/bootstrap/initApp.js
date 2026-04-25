@@ -4316,6 +4316,55 @@ function filterEligibleOfficersByFocusWeight(eligibleOfficers, loanCategory) {
   return weightedEligibleOfficers.length ? weightedEligibleOfficers : eligibleOfficers;
 }
 
+function getGlobalRunDominationPenalty(eligibleOfficerNames, runAssignmentCounts, selectedOfficer) {
+  if (getSelectedFairnessEngineForScoring() !== 'global' || eligibleOfficerNames.length < 2) {
+    return 0;
+  }
+
+  const projectedCounts = eligibleOfficerNames.map((officerName) => (
+    Number(runAssignmentCounts?.[officerName] || 0) + (officerName === selectedOfficer ? 1 : 0)
+  ));
+  const projectedTotal = projectedCounts.reduce((sum, count) => sum + count, 0);
+  if (projectedTotal < eligibleOfficerNames.length) {
+    return 0;
+  }
+
+  const minimumProjected = Math.min(...projectedCounts);
+  const selectedProjected = Number(runAssignmentCounts?.[selectedOfficer] || 0) + 1;
+  const projectedGap = selectedProjected - minimumProjected;
+  if (projectedGap <= 0 || minimumProjected > 0) {
+    return 0;
+  }
+
+  // Guard against avoidable all-to-one concentration while still allowing prior totals to influence selections.
+  return (projectedGap ** 2) * 0.85;
+}
+
+function selectOfficerWithGlobalDominationGuard(scoredOfficers, runAssignmentCounts) {
+  if (!Array.isArray(scoredOfficers) || !scoredOfficers.length || getSelectedFairnessEngineForScoring() !== 'global') {
+    return { officer: scoredOfficers?.[0] || null, guardApplied: false };
+  }
+
+  const baselineChoice = scoredOfficers[0];
+  const baselineRunCount = Number(runAssignmentCounts?.[baselineChoice.officer] || 0);
+  if (baselineRunCount <= 0) {
+    return { officer: baselineChoice, guardApplied: false };
+  }
+
+  const bestZeroRunOfficer = scoredOfficers.find((candidate) => Number(runAssignmentCounts?.[candidate.officer] || 0) === 0);
+  if (!bestZeroRunOfficer) {
+    return { officer: baselineChoice, guardApplied: false };
+  }
+
+  const materiallyWorseMultiplier = 1.35;
+  if (bestZeroRunOfficer.score <= (baselineChoice.score * materiallyWorseMultiplier)) {
+    // Deliberately bounded scoring-time domination guard (not a full post-assignment optimizer).
+    return { officer: bestZeroRunOfficer, guardApplied: true };
+  }
+
+  return { officer: baselineChoice, guardApplied: false };
+}
+
 function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCounts, officerAmountTotals, officerActiveSessions, runAssignmentCounts, runTypeAssignmentCounts, routingContext, loan) {
   const loanCategory = getLoanCategoryForType(loan.type);
   let eligibleOfficers = Object.values(officersByName).filter((officerConfig) => isOfficerEligibleForLoanType(officerConfig, loan));
@@ -4412,6 +4461,7 @@ function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCoun
     const loanWeightMultiplier = loanCategory === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE ? 1 : consumerGuardrailSettings.consumerLoanWeight;
     const runAssignmentCount = Number(runAssignmentCounts?.[officer] || 0);
     const runConcentrationPenalty = (getSelectedFairnessEngineForScoring() === 'officer_lane' ? 0.08 : 0.35) * (runAssignmentCount ** 2);
+    const globalRunDominationPenalty = getGlobalRunDominationPenalty(eligibleOfficerNames, runAssignmentCounts, officer);
     const fairnessScore = (typeVariance * 4)
       + (amountVariance * amountWeightMultiplier)
       + (loanVariance * loanWeightMultiplier)
@@ -4423,7 +4473,8 @@ function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCoun
       + consumerLaneUnevennessGuardPenalty
       + helocCompetitionPenalty
       + homogeneousHelocPenalty
-      + runConcentrationPenalty;
+      + runConcentrationPenalty
+      + globalRunDominationPenalty;
     const categoryWeight = loanCategoryUtils.getCategoryWeightForOfficer(officersByName[officer], loanCategory);
     const participationBias = getOfficerCategoryParticipationBias(
       officersByName[officer],
@@ -4449,6 +4500,7 @@ function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCoun
       consumerLaneUnevennessGuardPenalty,
       helocCompetitionPenalty,
       homogeneousHelocPenalty,
+      globalRunDominationPenalty,
       projectedTypeLoad: getNormalizedFairnessValue((officerTypeCounts[officer][loan.type] || 0) + 1, officerActiveSessions[officer]),
       projectedAmountLoad: getNormalizedFairnessValue(officerAmountTotals[officer] + goalAmount, officerActiveSessions[officer]),
       projectedLoanLoad: getNormalizedFairnessValue(officerLoanTotals[officer] + 1, officerActiveSessions[officer])
@@ -4456,9 +4508,19 @@ function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCoun
   });
 
   scoredOfficers.sort((officerA, officerB) => officerA.score - officerB.score);
+  const dominationGuardSelection = selectOfficerWithGlobalDominationGuard(scoredOfficers, runAssignmentCounts);
+  const selectedOfficerScore = dominationGuardSelection?.officer || scoredOfficers[0];
+  const selectedOfficerName = selectedOfficerScore.officer;
+  const reorderedScoredOfficers = [
+    {
+      ...selectedOfficerScore,
+      ...(dominationGuardSelection?.guardApplied ? { globalDominationGuardApplied: true } : {})
+    },
+    ...scoredOfficers.filter((candidate) => candidate.officer !== selectedOfficerName)
+  ];
   return {
-    selectedOfficer: scoredOfficers[0].officer,
-    scoredOfficers
+    selectedOfficer: selectedOfficerName,
+    scoredOfficers: reorderedScoredOfficers
   };
 }
 
