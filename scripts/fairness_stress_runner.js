@@ -509,10 +509,22 @@ function isExpectedInvalidScenarioError(message) {
 }
 
 function getMetricForVarianceDescriptor(descriptorKey, metrics = {}) {
+  const globalCountVariance = metrics.maxCountVariancePercent;
+  const globalDollarVariance = metrics.maxAmountVariancePercent;
+  const globalCountNormalizedMargin = isFiniteNumber(globalCountVariance)
+    ? (globalCountVariance - 15) / 15
+    : null;
+  const globalDollarNormalizedMargin = isFiniteNumber(globalDollarVariance)
+    ? (globalDollarVariance - 20) / 20
+    : null;
+
   const varianceDescriptors = {
-    global_count_variance: metrics.maxCountVariancePercent,
-    global_dollar_variance: metrics.maxAmountVariancePercent,
-    global_count_and_dollar_variance: metrics.maxCountVariancePercent,
+    global_count_variance: globalCountVariance,
+    global_dollar_variance: globalDollarVariance,
+    global_count_and_dollar_variance:
+      isFiniteNumber(globalCountNormalizedMargin) && isFiniteNumber(globalDollarNormalizedMargin)
+        ? (globalCountNormalizedMargin >= globalDollarNormalizedMargin ? globalCountVariance : globalDollarVariance)
+        : null,
     consumer_lane_count_variance: metrics.consumerVariance?.maxCountVariancePercent,
     consumer_lane_dollar_variance: metrics.consumerVariance?.maxAmountVariancePercent,
     flex_lane_count_variance: metrics.flexVariance?.maxCountVariancePercent,

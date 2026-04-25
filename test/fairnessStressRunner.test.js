@@ -503,6 +503,23 @@ test('global variance descriptors compare descriptor values against mapped globa
   };
   const combinedFlags = collectValidationFlags({ scenario, engine: 'global', result: combinedMismatch, officerStats: [], context: {} });
   assert.equal(combinedFlags.suspicious.includes('statusMetricDescriptor inconsistent with actual result basis'), true);
+
+  const combinedDollarMarginDominates = {
+    fairnessEvaluation: {
+      overallResult: 'REVIEW',
+      summaryItems: ['Overall loan variance: 16.0%', 'Overall dollar variance: 30.0%'],
+      statusMetricDescriptor: {
+        key: 'global_count_and_dollar_variance',
+        valuePercent: 30
+      },
+      metrics: {
+        maxCountVariancePercent: 16,
+        maxAmountVariancePercent: 30
+      }
+    }
+  };
+  const combinedDollarDominantFlags = collectValidationFlags({ scenario, engine: 'global', result: combinedDollarMarginDominates, officerStats: [], context: {} });
+  assert.equal(combinedDollarDominantFlags.suspicious.includes('statusMetricDescriptor inconsistent with actual result basis'), false);
 });
 
 test('stress summary includes attempted/suspicious/skipped/failure counts by engine', () => {
