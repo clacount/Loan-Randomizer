@@ -1181,7 +1181,18 @@ function analyzeReviewFeasibility({
   evaluationBudget = 2000
 }) {
   const activeOfficers = (scenario.officers || []).filter((officer) => !officer.isOnVacation);
-  const loans = Array.isArray(scenario.loans) ? scenario.loans : [];
+  const scenarioLoans = Array.isArray(scenario.loans) ? scenario.loans : [];
+  const scenarioLoanByName = Object.fromEntries(scenarioLoans.map((loan) => [loan.name, loan]));
+  const runLoanAssignments = Array.isArray(run?.result?.loanAssignments) ? run.result.loanAssignments : [];
+  const runLoanNames = new Set(
+    runLoanAssignments
+      .map((entry) => entry?.loan?.name)
+      .map((loanName) => String(loanName || '').trim())
+      .filter(Boolean)
+  );
+  const loans = runLoanNames.size > 0
+    ? [...runLoanNames].map((loanName) => scenarioLoanByName[loanName]).filter(Boolean)
+    : scenarioLoans;
   const optimizationMetrics = deriveOptimizationMetricsForFairness(run?.result || {});
   const eligibleByLoan = {};
   loans.forEach((loan) => {
@@ -1216,6 +1227,8 @@ function analyzeReviewFeasibility({
   let bestAssignmentMap = null;
   let bestDistance = getMetricDistanceToPass(bestFairness, engine);
   let helocRecalculationUnavailable = false;
+  let passFairness = null;
+  let passAssignmentMap = null;
 
   const evaluateMap = (assignmentMap) => {
     if (evaluationsRun >= evaluationBudget) {
@@ -1230,6 +1243,10 @@ function analyzeReviewFeasibility({
       optimizationMetrics
     });
     helocRecalculationUnavailable = helocRecalculationUnavailable || Boolean(candidate.helocRecalculationUnavailable);
+    if (candidate.fairnessEvaluation?.overallResult === 'PASS') {
+      passFairness = candidate.fairnessEvaluation;
+      passAssignmentMap = { ...assignmentMap };
+    }
     const candidateDistance = getMetricDistanceToPass(candidate.fairnessEvaluation, engine);
     if (candidateDistance < bestDistance || bestAssignmentMap === null) {
       bestDistance = candidateDistance;
@@ -1286,8 +1303,8 @@ function analyzeReviewFeasibility({
       classification,
       searchType,
       ...buildFeasibilityCandidateSummary({
-        fairnessEvaluation: bestFairness,
-        assignmentMap: bestAssignmentMap,
+        fairnessEvaluation: passFairness || bestFairness,
+        assignmentMap: passAssignmentMap || bestAssignmentMap,
         reviewBasis,
         evaluationsRun
       })
@@ -1343,8 +1360,8 @@ function analyzeReviewFeasibility({
     classification: (foundPass && !helocRecalculationUnavailable) ? FEASIBILITY_CLASSIFICATIONS.AVOIDABLE : FEASIBILITY_CLASSIFICATIONS.UNKNOWN,
     searchType,
     ...buildFeasibilityCandidateSummary({
-      fairnessEvaluation: bestFairness,
-      assignmentMap: bestAssignmentMap,
+      fairnessEvaluation: passFairness || bestFairness,
+      assignmentMap: passAssignmentMap || bestAssignmentMap,
       reviewBasis,
       evaluationsRun
     })
