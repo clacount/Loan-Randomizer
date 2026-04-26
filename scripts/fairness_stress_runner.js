@@ -11,6 +11,7 @@ const REVIEW_SAMPLE_LIMIT = 10;
 const FEASIBILITY_SAMPLE_LIMIT = 10;
 const EXACT_FEASIBILITY_MAX_LOANS = 10;
 const EXACT_FEASIBILITY_MAX_OFFICERS = 6;
+const EXACT_FEASIBILITY_AUTO_BUDGET_CAP = 20000;
 const CONSUMER_LOAN_TYPES = ['Personal', 'Auto', 'Credit Card', 'Collateralized'];
 const MORTGAGE_LOAN_TYPES = ['HELOC', 'First Mortgage', 'Home Refi'];
 let caseFileSequence = 0;
@@ -1172,13 +1173,30 @@ function buildFeasibilityCandidateSummary({
   };
 }
 
+function estimateExactFeasibilitySearchSpace(loans = [], eligibleByLoan = {}, cap = EXACT_FEASIBILITY_AUTO_BUDGET_CAP) {
+  let total = 1;
+  for (let i = 0; i < loans.length; i += 1) {
+    const loan = loans[i];
+    const eligibleCount = Array.isArray(eligibleByLoan[loan.name]) ? eligibleByLoan[loan.name].length : 0;
+    if (!eligibleCount) {
+      return 0;
+    }
+    total *= eligibleCount;
+    if (!Number.isFinite(total) || total > cap) {
+      return null;
+    }
+  }
+  return total;
+}
+
 function analyzeReviewFeasibility({
   context,
   scenario,
   engine,
   run,
   reviewBasis,
-  evaluationBudget = 2000
+  evaluationBudget = 2000,
+  autoExpandExactSearchBudget = true
 }) {
   const activeOfficers = (scenario.officers || []).filter((officer) => !officer.isOnVacation);
   const scenarioLoans = Array.isArray(scenario.loans) ? scenario.loans : [];
@@ -1221,6 +1239,17 @@ function analyzeReviewFeasibility({
   const searchType = (loans.length <= EXACT_FEASIBILITY_MAX_LOANS && activeOfficers.length <= EXACT_FEASIBILITY_MAX_OFFICERS)
     ? 'exact_search'
     : 'heuristic_bounded_search';
+  const exactSearchSpaceSize = searchType === 'exact_search'
+    ? estimateExactFeasibilitySearchSpace(loans, eligibleByLoan)
+    : null;
+  const effectiveEvaluationBudget = (
+    searchType === 'exact_search'
+    && autoExpandExactSearchBudget
+    && Number.isFinite(exactSearchSpaceSize)
+    && exactSearchSpaceSize !== null
+  )
+    ? Math.max(evaluationBudget, exactSearchSpaceSize)
+    : evaluationBudget;
 
   let evaluationsRun = 0;
   let bestFairness = run?.result?.fairnessEvaluation || null;
@@ -1231,7 +1260,7 @@ function analyzeReviewFeasibility({
   let passAssignmentMap = null;
 
   const evaluateMap = (assignmentMap) => {
-    if (evaluationsRun >= evaluationBudget) {
+    if (evaluationsRun >= effectiveEvaluationBudget) {
       return null;
     }
     evaluationsRun += 1;
@@ -1265,7 +1294,7 @@ function analyzeReviewFeasibility({
 
     const walk = (loanIndex) => {
       if (foundPass) return;
-      if (evaluationsRun >= evaluationBudget) {
+      if (evaluationsRun >= effectiveEvaluationBudget) {
         budgetExhausted = true;
         exhausted = false;
         return;

@@ -4957,6 +4957,165 @@ function getLaneOptimizationCompositePercent(countVariancePercent, amountVarianc
   return Math.max(normalizedCountPercent, normalizedAmountPercent);
 }
 
+const MAX_DESCRIPTOR_OPTIMIZATION_STAGES = 4;
+
+function buildCountRebalancedSeedAssignmentMap({
+  initialLoanToOfficerMap,
+  optimizedLoans,
+  eligibleOfficersByLoan,
+  activeOfficerNames,
+  runningTotals,
+  prioritizeSmallestLoan = true
+}) {
+  if (!(initialLoanToOfficerMap instanceof Map) || !Array.isArray(optimizedLoans) || !optimizedLoans.length) {
+    return null;
+  }
+
+  const seedMap = new Map(initialLoanToOfficerMap);
+  const countsByOfficer = Object.fromEntries(activeOfficerNames.map((officerName) => {
+    const priorStats = normalizeOfficerStats(runningTotals?.officers?.[officerName]);
+    return [officerName, priorStats.loanCount];
+  }));
+
+  optimizedLoans.forEach((loan) => {
+    const officerName = seedMap.get(loan);
+    if (officerName && countsByOfficer[officerName] !== undefined) {
+      countsByOfficer[officerName] += 1;
+    }
+  });
+
+  const orderedLoans = [...optimizedLoans].sort((loanA, loanB) => {
+    const amountCompare = prioritizeSmallestLoan
+      ? (getGoalAmountForLoan(loanA) - getGoalAmountForLoan(loanB))
+      : (getGoalAmountForLoan(loanB) - getGoalAmountForLoan(loanA));
+    if (amountCompare !== 0) {
+      return amountCompare;
+    }
+    return String(loanA?.name || '').localeCompare(String(loanB?.name || ''));
+  });
+
+  const maxMoves = optimizedLoans.length * Math.max(activeOfficerNames.length, 2);
+  for (let moveIndex = 0; moveIndex < maxMoves; moveIndex += 1) {
+    const sortedOfficers = [...activeOfficerNames].sort((officerA, officerB) => {
+      const countCompare = (countsByOfficer[officerA] || 0) - (countsByOfficer[officerB] || 0);
+      if (countCompare !== 0) {
+        return countCompare;
+      }
+      return String(officerA).localeCompare(String(officerB));
+    });
+    const lowestOfficer = sortedOfficers[0];
+    const highestOfficer = sortedOfficers[sortedOfficers.length - 1];
+    if (!lowestOfficer || !highestOfficer || countsByOfficer[highestOfficer] - countsByOfficer[lowestOfficer] <= 1) {
+      break;
+    }
+
+    const loanToMove = orderedLoans.find((loan) => {
+      const currentOfficer = seedMap.get(loan);
+      if (currentOfficer !== highestOfficer) {
+        return false;
+      }
+      const eligible = eligibleOfficersByLoan.get(loan) || [];
+      return eligible.includes(lowestOfficer);
+    });
+    if (!loanToMove) {
+      break;
+    }
+
+    seedMap.set(loanToMove, lowestOfficer);
+    countsByOfficer[highestOfficer] -= 1;
+    countsByOfficer[lowestOfficer] += 1;
+  }
+
+  return seedMap;
+}
+
+function buildAmountRebalancedSeedAssignmentMap({
+  initialLoanToOfficerMap,
+  optimizedLoans,
+  eligibleOfficersByLoan,
+  activeOfficerNames,
+  runningTotals,
+  prioritizeLargestLoan = true
+}) {
+  if (!(initialLoanToOfficerMap instanceof Map) || !Array.isArray(optimizedLoans) || !optimizedLoans.length) {
+    return null;
+  }
+
+  const seedMap = new Map(initialLoanToOfficerMap);
+  const amountByOfficer = Object.fromEntries(activeOfficerNames.map((officerName) => {
+    const priorStats = normalizeOfficerStats(runningTotals?.officers?.[officerName]);
+    return [officerName, priorStats.totalAmountRequested];
+  }));
+
+  optimizedLoans.forEach((loan) => {
+    const officerName = seedMap.get(loan);
+    if (officerName && amountByOfficer[officerName] !== undefined) {
+      amountByOfficer[officerName] += getGoalAmountForLoan(loan);
+    }
+  });
+
+  const orderedLoans = [...optimizedLoans].sort((loanA, loanB) => {
+    const amountCompare = prioritizeLargestLoan
+      ? (getGoalAmountForLoan(loanB) - getGoalAmountForLoan(loanA))
+      : (getGoalAmountForLoan(loanA) - getGoalAmountForLoan(loanB));
+    if (amountCompare !== 0) {
+      return amountCompare;
+    }
+    return String(loanA?.name || '').localeCompare(String(loanB?.name || ''));
+  });
+
+  const maxMoves = optimizedLoans.length * Math.max(activeOfficerNames.length, 2);
+  for (let moveIndex = 0; moveIndex < maxMoves; moveIndex += 1) {
+    const sortedOfficers = [...activeOfficerNames].sort((officerA, officerB) => {
+      const amountCompare = (amountByOfficer[officerA] || 0) - (amountByOfficer[officerB] || 0);
+      if (amountCompare !== 0) {
+        return amountCompare;
+      }
+      return String(officerA).localeCompare(String(officerB));
+    });
+    const lowestOfficer = sortedOfficers[0];
+    const highestOfficer = sortedOfficers[sortedOfficers.length - 1];
+    if (!lowestOfficer || !highestOfficer || amountByOfficer[highestOfficer] <= amountByOfficer[lowestOfficer]) {
+      break;
+    }
+
+    const loanToMove = orderedLoans.find((loan) => {
+      const currentOfficer = seedMap.get(loan);
+      if (currentOfficer !== highestOfficer) {
+        return false;
+      }
+      const eligible = eligibleOfficersByLoan.get(loan) || [];
+      return eligible.includes(lowestOfficer);
+    });
+    if (!loanToMove) {
+      break;
+    }
+
+    const goalAmount = getGoalAmountForLoan(loanToMove);
+    seedMap.set(loanToMove, lowestOfficer);
+    amountByOfficer[highestOfficer] -= goalAmount;
+    amountByOfficer[lowestOfficer] += goalAmount;
+  }
+
+  return seedMap;
+}
+
+function dedupeSeedAssignmentMaps(seedMaps = [], loans = []) {
+  const orderedLoans = Array.isArray(loans) ? loans : [];
+  const seen = new Set();
+  return seedMaps.filter((seedMap) => {
+    if (!(seedMap instanceof Map)) {
+      return false;
+    }
+    const key = orderedLoans.map((loan) => `${String(loan?.name || '')}:${String(seedMap.get(loan) || '')}`).join('|');
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
 function getOfficerLaneTargetVarianceSelector(statusMetricDescriptorKey) {
   switch (String(statusMetricDescriptorKey || '')) {
     case 'consumer_lane_count_variance':
@@ -4973,6 +5132,44 @@ function getOfficerLaneTargetVarianceSelector(statusMetricDescriptorKey) {
       return (fairnessEvaluation) => Number(fairnessEvaluation?.metrics?.flexVariance?.maxAmountVariancePercent) || 0;
     case 'heloc_weighted_variance':
       return (fairnessEvaluation) => Number(fairnessEvaluation?.metrics?.helocWeightedVariancePercent) || 0;
+    default:
+      return null;
+  }
+}
+
+function getGlobalTargetVarianceSelector(statusMetricDescriptorKey) {
+  switch (String(statusMetricDescriptorKey || '')) {
+    case 'global_count_variance':
+      return (fairnessEvaluation) => Number(fairnessEvaluation?.metrics?.maxCountVariancePercent) || 0;
+    case 'global_dollar_variance':
+      return (fairnessEvaluation) => Number(fairnessEvaluation?.metrics?.maxAmountVariancePercent) || 0;
+    case 'global_count_and_dollar_variance':
+      return (fairnessEvaluation) => getLaneOptimizationCompositePercent(
+        fairnessEvaluation?.metrics?.maxCountVariancePercent,
+        fairnessEvaluation?.metrics?.maxAmountVariancePercent
+      );
+    default:
+      return null;
+  }
+}
+
+function getGlobalCandidateConstraint(statusMetricDescriptorKey) {
+  switch (String(statusMetricDescriptorKey || '')) {
+    case 'global_dollar_variance':
+      return (fairnessEvaluation) => Number(fairnessEvaluation?.metrics?.maxCountVariancePercent) <= 15;
+    default:
+      return null;
+  }
+}
+
+function getOfficerLaneCandidateConstraint(statusMetricDescriptorKey) {
+  switch (String(statusMetricDescriptorKey || '')) {
+    case 'consumer_lane_dollar_variance':
+      return (fairnessEvaluation) => Number(fairnessEvaluation?.metrics?.consumerVariance?.maxCountVariancePercent) <= 15;
+    case 'mortgage_lane_dollar_variance':
+      return (fairnessEvaluation) => Number(fairnessEvaluation?.metrics?.mortgageVariance?.maxCountVariancePercent) <= 15;
+    case 'flex_lane_dollar_variance':
+      return (fairnessEvaluation) => Number(fairnessEvaluation?.metrics?.flexVariance?.maxCountVariancePercent) <= 15;
     default:
       return null;
   }
@@ -5064,7 +5261,17 @@ function getHomogeneousHelocWeightedVariancePercent({ loanToOfficerMap, cleanLoa
   return getLaneOptimizationCompositePercent(countVariancePercent, amountVariancePercent);
 }
 
-function optimizeGlobalAssignmentsResult({ activeLoanTypes, cleanLoans, cleanOfficerNames, allOfficerNames, officersByName, runningTotals, result }) {
+function optimizeGlobalAssignmentsResult({
+  activeLoanTypes,
+  cleanLoans,
+  cleanOfficerNames,
+  allOfficerNames,
+  officersByName,
+  runningTotals,
+  result,
+  optimizationStage = 0,
+  attemptedDescriptorKeys = []
+}) {
   if (getSelectedFairnessEngine() !== 'global' || !window.OfficerLaneOptimizationService?.optimizeConsumerLaneAssignments) {
     return result;
   }
@@ -5076,6 +5283,17 @@ function optimizeGlobalAssignmentsResult({ activeLoanTypes, cleanLoans, cleanOff
   };
 
   const baselineFairnessEvaluation = evaluateResultFairness(result);
+  const baselineDescriptorKey = baselineFairnessEvaluation?.statusMetricDescriptor?.key;
+  const descriptorVarianceSelector = getGlobalTargetVarianceSelector(baselineDescriptorKey);
+  const candidateConstraint = getGlobalCandidateConstraint(baselineDescriptorKey);
+  const attemptedDescriptors = new Set([...(Array.isArray(attemptedDescriptorKeys) ? attemptedDescriptorKeys : []), baselineDescriptorKey].filter(Boolean));
+  const isCountVarianceDescriptor = typeof baselineDescriptorKey === 'string' && baselineDescriptorKey.endsWith('_count_variance');
+  const isCombinedVarianceDescriptor = baselineDescriptorKey === 'global_count_and_dollar_variance';
+  const shouldIncludeOptimizationLoan = (loan) => (
+    (isCountVarianceDescriptor || isCombinedVarianceDescriptor || typeof candidateConstraint === 'function')
+      ? true
+      : getGoalAmountForLoan(loan) > 0
+  );
   if (baselineFairnessEvaluation?.overallResult === 'PASS') {
     result.fairnessEvaluation = baselineFairnessEvaluation;
     result.optimizationApplied = false;
@@ -5090,18 +5308,92 @@ function optimizeGlobalAssignmentsResult({ activeLoanTypes, cleanLoans, cleanOff
   const eligibleOfficersByLoan = new Map(
     cleanLoans.map((loan) => [loan, cleanOfficerNames.filter((officerName) => isOfficerEligibleForLoanType(officersByName[officerName], loan))])
   );
+  const globalVarianceSelector = descriptorVarianceSelector || ((fairnessEvaluation) => getLaneOptimizationCompositePercent(
+    fairnessEvaluation?.metrics?.maxCountVariancePercent,
+    fairnessEvaluation?.metrics?.maxAmountVariancePercent
+  ));
+  const optimizationPrimaryThreshold = isCountVarianceDescriptor ? 15 : window.OfficerLaneOptimizationService.PRIMARY_TARGET_PERCENT;
+  const isDollarVarianceDescriptor = !isCountVarianceDescriptor && !isCombinedVarianceDescriptor;
+  const optimizationLoans = cleanLoans.filter((loan) => shouldIncludeOptimizationLoan(loan));
+  const countSeedMaps = [
+    buildCountRebalancedSeedAssignmentMap({
+      initialLoanToOfficerMap,
+      optimizedLoans: optimizationLoans,
+      eligibleOfficersByLoan,
+      activeOfficerNames: cleanOfficerNames,
+      runningTotals,
+      prioritizeSmallestLoan: true
+    }),
+    buildCountRebalancedSeedAssignmentMap({
+      initialLoanToOfficerMap,
+      optimizedLoans: optimizationLoans,
+      eligibleOfficersByLoan,
+      activeOfficerNames: cleanOfficerNames,
+      runningTotals,
+      prioritizeSmallestLoan: false
+    })
+  ];
+  const amountSeedMaps = [
+    buildAmountRebalancedSeedAssignmentMap({
+      initialLoanToOfficerMap,
+      optimizedLoans: optimizationLoans,
+      eligibleOfficersByLoan,
+      activeOfficerNames: cleanOfficerNames,
+      runningTotals,
+      prioritizeLargestLoan: true
+    }),
+    buildAmountRebalancedSeedAssignmentMap({
+      initialLoanToOfficerMap,
+      optimizedLoans: optimizationLoans,
+      eligibleOfficersByLoan,
+      activeOfficerNames: cleanOfficerNames,
+      runningTotals,
+      prioritizeLargestLoan: false
+    })
+  ];
+  const globalSeedMaps = dedupeSeedAssignmentMaps(
+    isCombinedVarianceDescriptor
+      ? [...countSeedMaps, ...amountSeedMaps]
+      : (isCountVarianceDescriptor ? countSeedMaps : [...amountSeedMaps, ...countSeedMaps]),
+    optimizationLoans
+  );
 
   const optimization = window.OfficerLaneOptimizationService.optimizeConsumerLaneAssignments({
     initialLoanToOfficerMap,
     eligibleOfficersByLoan,
     isConsumerLoan: () => true,
-    shouldIncludeLoan: (loan) => getGoalAmountForLoan(loan) > 0,
-    getVariancePercent: (fairnessEvaluation) => getLaneOptimizationCompositePercent(
-      fairnessEvaluation?.metrics?.maxCountVariancePercent,
-      fairnessEvaluation?.metrics?.maxAmountVariancePercent
-    ),
-    targetLabel: 'global variance',
-    maxEvaluations: Math.min(300, Math.max(120, cleanLoans.length * Math.max(cleanOfficerNames.length, 2))),
+    shouldIncludeLoan: shouldIncludeOptimizationLoan,
+    getVariancePercent: globalVarianceSelector,
+    targetLabel: baselineDescriptorKey === 'global_count_variance'
+      ? 'global count variance'
+      : (
+        baselineDescriptorKey === 'global_dollar_variance'
+          ? 'global dollar variance'
+          : (baselineDescriptorKey === 'global_count_and_dollar_variance' ? 'global count/dollar variance' : 'global variance')
+      ),
+    primaryTargetPercent: optimizationPrimaryThreshold,
+    advisoryTargetPercent: window.OfficerLaneOptimizationService.ADVISORY_TARGET_PERCENT,
+    seedLoanToOfficerMaps: globalSeedMaps,
+    enableBreadthSearchFallback: isDollarVarianceDescriptor,
+    frontierWidth: isCombinedVarianceDescriptor
+      ? Math.min(24, Math.max(10, cleanOfficerNames.length * 4))
+      : (
+        isCountVarianceDescriptor
+          ? Math.min(24, Math.max(8, cleanOfficerNames.length * 3))
+          : (isDollarVarianceDescriptor ? Math.min(24, Math.max(10, cleanOfficerNames.length * 4)) : 1)
+      ),
+    isCandidateAllowed: candidateConstraint,
+    maxEvaluations: isCombinedVarianceDescriptor
+      ? Math.min(2400, Math.max(700, cleanLoans.length * Math.max(cleanOfficerNames.length * 5, 12)))
+      : (
+        isCountVarianceDescriptor
+          ? Math.min(1600, Math.max(400, cleanLoans.length * Math.max(cleanOfficerNames.length * 3, 8)))
+          : (
+            isDollarVarianceDescriptor
+              ? Math.min(3200, Math.max(1200, cleanLoans.length * Math.max(cleanOfficerNames.length * 20, 60)))
+              : Math.min(300, Math.max(120, cleanLoans.length * Math.max(cleanOfficerNames.length, 2)))
+          )
+      ),
     evaluateCandidate: (loanToOfficerMap) => {
       const candidateLoanAssignments = cleanLoans.map((loan) => ({
         loan,
@@ -5128,7 +5420,16 @@ function optimizeGlobalAssignmentsResult({ activeLoanTypes, cleanLoans, cleanOff
   result.optimizationSummaryMessage = optimization.summaryMessage;
   result.optimizationInitialGlobalVariancePercent = optimization.initialVariancePercent;
   result.optimizationFinalGlobalVariancePercent = optimization.finalVariancePercent;
-  result.optimizationTargetLabel = 'global variance';
+  if (!result.optimizationTargetDescriptorKey) {
+    result.optimizationTargetLabel = baselineDescriptorKey === 'global_count_variance'
+      ? 'global count variance'
+      : (
+        baselineDescriptorKey === 'global_dollar_variance'
+          ? 'global dollar variance'
+          : (baselineDescriptorKey === 'global_count_and_dollar_variance' ? 'global count/dollar variance' : 'global variance')
+      );
+    result.optimizationTargetDescriptorKey = baselineDescriptorKey || null;
+  }
 
   if (!optimization.improved) {
     const selectedFairnessEvaluation = evaluateResultFairness(result);
@@ -5153,10 +5454,36 @@ function optimizeGlobalAssignmentsResult({ activeLoanTypes, cleanLoans, cleanOff
   });
   const optimizedFairnessEvaluation = evaluateResultFairness(result);
   result.fairnessEvaluation = applyOptimizationSummaryToFairnessEvaluation(result, optimizedFairnessEvaluation);
+  if (optimizationStage < (MAX_DESCRIPTOR_OPTIMIZATION_STAGES - 1) && result.fairnessEvaluation?.overallResult === 'REVIEW') {
+    const nextDescriptorKey = result.fairnessEvaluation?.statusMetricDescriptor?.key;
+    if (nextDescriptorKey && nextDescriptorKey !== baselineDescriptorKey && !attemptedDescriptors.has(nextDescriptorKey)) {
+      return optimizeGlobalAssignmentsResult({
+        activeLoanTypes,
+        cleanLoans,
+        cleanOfficerNames,
+        allOfficerNames,
+        officersByName,
+        runningTotals,
+        result,
+        optimizationStage: optimizationStage + 1,
+        attemptedDescriptorKeys: [...attemptedDescriptors]
+      });
+    }
+  }
   return result;
 }
 
-function optimizeOfficerLaneAssignmentsResult({ activeLoanTypes, cleanLoans, cleanOfficerNames, allOfficerNames, officersByName, runningTotals, result }) {
+function optimizeOfficerLaneAssignmentsResult({
+  activeLoanTypes,
+  cleanLoans,
+  cleanOfficerNames,
+  allOfficerNames,
+  officersByName,
+  runningTotals,
+  result,
+  optimizationStage = 0,
+  attemptedDescriptorKeys = []
+}) {
   if (getSelectedFairnessEngine() !== 'officer_lane' || !window.OfficerLaneOptimizationService?.optimizeConsumerLaneAssignments) {
     return result;
   }
@@ -5165,7 +5492,14 @@ function optimizeOfficerLaneAssignmentsResult({ activeLoanTypes, cleanLoans, cle
   const baselineDescriptorKey = baselineFairnessEvaluation?.statusMetricDescriptor?.key;
   const isHelocOnlySupportPool = isHomogeneousHelocSupportPool(cleanLoans, officersByName);
   const descriptorVarianceSelector = getOfficerLaneTargetVarianceSelector(baselineDescriptorKey);
+  const candidateConstraint = getOfficerLaneCandidateConstraint(baselineDescriptorKey);
+  const attemptedDescriptors = new Set([...(Array.isArray(attemptedDescriptorKeys) ? attemptedDescriptorKeys : []), baselineDescriptorKey].filter(Boolean));
   const isCountVarianceDescriptor = typeof baselineDescriptorKey === 'string' && baselineDescriptorKey.endsWith('_count_variance');
+  const shouldIncludeOptimizationLoan = (loan) => (
+    (isCountVarianceDescriptor || typeof candidateConstraint === 'function')
+      ? true
+      : getGoalAmountForLoan(loan) > 0
+  );
 
   const officerConfigs = cleanOfficerNames
     .map((officerName) => normalizeOfficerConfig(officersByName[officerName]))
@@ -5173,6 +5507,10 @@ function optimizeOfficerLaneAssignmentsResult({ activeLoanTypes, cleanLoans, cle
   const consumerLaneCount = officerConfigs.filter((officer) => {
     const eligibility = loanCategoryUtils.normalizeOfficerEligibility(officer.eligibility);
     return eligibility.consumer && !eligibility.mortgage;
+  }).length;
+  const mortgageLaneCount = officerConfigs.filter((officer) => {
+    const eligibility = loanCategoryUtils.normalizeOfficerEligibility(officer.eligibility);
+    return !eligibility.consumer && eligibility.mortgage;
   }).length;
   const flexLaneCount = officerConfigs.filter((officer) => {
     const eligibility = loanCategoryUtils.normalizeOfficerEligibility(officer.eligibility);
@@ -5185,6 +5523,24 @@ function optimizeOfficerLaneAssignmentsResult({ activeLoanTypes, cleanLoans, cle
       targetLabel: 'weighted HELOC variance',
       shouldOptimizeLoan: (loan) => getMortgageLoanPermissionLevel(loan.type) === 'heloc'
     }
+    : (typeof baselineDescriptorKey === 'string' && baselineDescriptorKey.startsWith('mortgage_lane_'))
+      ? {
+        getVariancePercent: (fairnessEvaluation) => getLaneOptimizationCompositePercent(
+          fairnessEvaluation?.metrics?.mortgageVariance?.maxCountVariancePercent,
+          fairnessEvaluation?.metrics?.mortgageVariance?.maxAmountVariancePercent
+        ),
+        targetLabel: 'mortgage-lane variance',
+        shouldOptimizeLoan: (loan) => getLoanCategoryForType(loan.type) === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE
+      }
+      : (mortgageLaneCount >= 2 && consumerLaneCount === 0 && flexLaneCount === 0)
+        ? {
+          getVariancePercent: (fairnessEvaluation) => getLaneOptimizationCompositePercent(
+            fairnessEvaluation?.metrics?.mortgageVariance?.maxCountVariancePercent,
+            fairnessEvaluation?.metrics?.mortgageVariance?.maxAmountVariancePercent
+          ),
+          targetLabel: 'mortgage-lane variance',
+          shouldOptimizeLoan: (loan) => getLoanCategoryForType(loan.type) === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE
+        }
     : (consumerLaneCount >= 2
       ? {
         getVariancePercent: (fairnessEvaluation) => getLaneOptimizationCompositePercent(
@@ -5221,6 +5577,7 @@ function optimizeOfficerLaneAssignmentsResult({ activeLoanTypes, cleanLoans, cle
     })
     : optimizationTarget.getVariancePercent(baselineFairnessEvaluation);
   const optimizationPrimaryThreshold = isCountVarianceDescriptor ? 15 : window.OfficerLaneOptimizationService.PRIMARY_TARGET_PERCENT;
+  const isDollarVarianceDescriptor = !isCountVarianceDescriptor;
   if (!isHelocOnlySupportPool && baselineTargetVariance < optimizationPrimaryThreshold) {
     result.fairnessEvaluation = baselineFairnessEvaluation;
     result.optimizationApplied = false;
@@ -5231,8 +5588,10 @@ function optimizeOfficerLaneAssignmentsResult({ activeLoanTypes, cleanLoans, cle
     result.optimizationFinalHelocWeightedVariancePercent = null;
     result.optimizationTierReached = 'under_20';
     result.optimizationSummaryMessage = '';
-    result.optimizationTargetLabel = optimizationTarget.targetLabel;
-    result.optimizationTargetDescriptorKey = baselineDescriptorKey || null;
+    if (!result.optimizationTargetDescriptorKey) {
+      result.optimizationTargetLabel = optimizationTarget.targetLabel;
+      result.optimizationTargetDescriptorKey = baselineDescriptorKey || null;
+    }
     return result;
   }
 
@@ -5240,20 +5599,71 @@ function optimizeOfficerLaneAssignmentsResult({ activeLoanTypes, cleanLoans, cle
   const eligibleOfficersByLoan = new Map(
     cleanLoans.map((loan) => [loan, cleanOfficerNames.filter((officerName) => isOfficerEligibleForLoanType(officersByName[officerName], loan))])
   );
+  const optimizationLoans = cleanLoans.filter((loan) => shouldIncludeOptimizationLoan(loan));
+  const countSeedMaps = [
+    buildCountRebalancedSeedAssignmentMap({
+      initialLoanToOfficerMap,
+      optimizedLoans: optimizationLoans,
+      eligibleOfficersByLoan,
+      activeOfficerNames: cleanOfficerNames,
+      runningTotals,
+      prioritizeSmallestLoan: true
+    }),
+    buildCountRebalancedSeedAssignmentMap({
+      initialLoanToOfficerMap,
+      optimizedLoans: optimizationLoans,
+      eligibleOfficersByLoan,
+      activeOfficerNames: cleanOfficerNames,
+      runningTotals,
+      prioritizeSmallestLoan: false
+    })
+  ].filter((seedMap) => seedMap instanceof Map);
+  const amountSeedMaps = [
+    buildAmountRebalancedSeedAssignmentMap({
+      initialLoanToOfficerMap,
+      optimizedLoans: optimizationLoans,
+      eligibleOfficersByLoan,
+      activeOfficerNames: cleanOfficerNames,
+      runningTotals,
+      prioritizeLargestLoan: true
+    }),
+    buildAmountRebalancedSeedAssignmentMap({
+      initialLoanToOfficerMap,
+      optimizedLoans: optimizationLoans,
+      eligibleOfficersByLoan,
+      activeOfficerNames: cleanOfficerNames,
+      runningTotals,
+      prioritizeLargestLoan: false
+    })
+  ].filter((seedMap) => seedMap instanceof Map);
+  const seedLoanToOfficerMaps = dedupeSeedAssignmentMaps(
+    isCountVarianceDescriptor ? countSeedMaps : [...amountSeedMaps, ...countSeedMaps],
+    optimizationLoans
+  );
 
   const optimization = window.OfficerLaneOptimizationService.optimizeConsumerLaneAssignments({
     initialLoanToOfficerMap,
     eligibleOfficersByLoan,
     isConsumerLoan: (loan) => optimizationTarget.shouldOptimizeLoan(loan, eligibleOfficersByLoan.get(loan) || []),
-    shouldIncludeLoan: (loan) => getGoalAmountForLoan(loan) > 0,
+    shouldIncludeLoan: shouldIncludeOptimizationLoan,
     getVariancePercent: optimizationTarget.getVariancePercent,
     targetLabel: optimizationTarget.targetLabel,
     primaryTargetPercent: optimizationPrimaryThreshold,
     advisoryTargetPercent: window.OfficerLaneOptimizationService.ADVISORY_TARGET_PERCENT,
+    seedLoanToOfficerMaps,
+    enableBreadthSearchFallback: isDollarVarianceDescriptor,
+    frontierWidth: isCountVarianceDescriptor
+      ? Math.min(24, Math.max(8, cleanOfficerNames.length * 3))
+      : (isDollarVarianceDescriptor ? Math.min(24, Math.max(8, cleanOfficerNames.length * 3)) : 1),
+    isCandidateAllowed: candidateConstraint,
     // Bounded candidate evaluations keep this deterministic enough for audits and prevent unbounded retry loops.
     maxEvaluations: isCountVarianceDescriptor
-      ? Math.min(420, Math.max(160, cleanLoans.length * Math.max(cleanOfficerNames.length, 3)))
-      : Math.min(250, Math.max(100, cleanLoans.length * Math.max(cleanOfficerNames.length, 2))),
+      ? Math.min(1600, Math.max(400, cleanLoans.length * Math.max(cleanOfficerNames.length * 3, 8)))
+      : (
+        isDollarVarianceDescriptor
+          ? Math.min(2400, Math.max(900, cleanLoans.length * Math.max(cleanOfficerNames.length * 15, 45)))
+          : Math.min(250, Math.max(100, cleanLoans.length * Math.max(cleanOfficerNames.length, 2)))
+      ),
     forceOptimizationRun: isHelocOnlySupportPool,
     evaluateCandidate: (loanToOfficerMap) => {
       const candidateLoanAssignments = cleanLoans.map((loan) => ({
@@ -5288,8 +5698,10 @@ function optimizeOfficerLaneAssignmentsResult({ activeLoanTypes, cleanLoans, cle
   result.optimizationFinalHelocWeightedVariancePercent = isHelocOnlySupportPool ? optimization.finalVariancePercent : null;
   result.optimizationTierReached = optimization.tierReached;
   result.optimizationSummaryMessage = optimization.summaryMessage;
-  result.optimizationTargetLabel = optimizationTarget.targetLabel;
-  result.optimizationTargetDescriptorKey = baselineDescriptorKey || null;
+  if (!result.optimizationTargetDescriptorKey) {
+    result.optimizationTargetLabel = optimizationTarget.targetLabel;
+    result.optimizationTargetDescriptorKey = baselineDescriptorKey || null;
+  }
 
   if (!optimization.improved) {
     // The loan mix may make <=25% unattainable; keep the best available result even if it remains above advisory.
@@ -5315,6 +5727,22 @@ function optimizeOfficerLaneAssignmentsResult({ activeLoanTypes, cleanLoans, cle
   });
   const optimizedFairnessEvaluation = evaluateResultFairness(result);
   result.fairnessEvaluation = applyOptimizationSummaryToFairnessEvaluation(result, optimizedFairnessEvaluation);
+  if (optimizationStage < (MAX_DESCRIPTOR_OPTIMIZATION_STAGES - 1) && result.fairnessEvaluation?.overallResult === 'REVIEW') {
+    const nextDescriptorKey = result.fairnessEvaluation?.statusMetricDescriptor?.key;
+    if (nextDescriptorKey && nextDescriptorKey !== baselineDescriptorKey && !attemptedDescriptors.has(nextDescriptorKey)) {
+      return optimizeOfficerLaneAssignmentsResult({
+        activeLoanTypes,
+        cleanLoans,
+        cleanOfficerNames,
+        allOfficerNames,
+        officersByName,
+        runningTotals,
+        result,
+        optimizationStage: optimizationStage + 1,
+        attemptedDescriptorKeys: [...attemptedDescriptors]
+      });
+    }
+  }
   return result;
 }
 

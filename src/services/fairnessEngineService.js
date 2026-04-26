@@ -699,10 +699,12 @@
   function evaluateFairness({ engineType, officers = [], officerStats = [], optimizationMetrics = {} } = {}) {
     const normalizedEngine = normalizeEngineType(engineType);
     const normalizedOfficers = Array.isArray(officers) ? officers.map((officer) => normalizeOfficer(officer)) : [];
+    const activeOfficers = normalizedOfficers.filter((officer) => !officer.isOnVacation);
+    const activeOfficerNames = new Set(activeOfficers.map((officer) => officer.name));
     const safeOfficerStats = Array.isArray(officerStats)
       ? officerStats.map((entry) => normalizeOfficerStatsEntry(entry)).filter((entry) => entry.officer)
       : [];
-    const participatingOfficerStats = safeOfficerStats;
+    const participatingOfficerStats = safeOfficerStats.filter((entry) => activeOfficerNames.has(entry.officer));
 
     const overallAverageLoanCount = participatingOfficerStats.length
       ? participatingOfficerStats.reduce((sum, entry) => sum + (Number(entry.totalLoans) || 0), 0) / participatingOfficerStats.length
@@ -711,7 +713,7 @@
       ? participatingOfficerStats.reduce((sum, entry) => sum + (Number(entry.totalAmount) || 0), 0) / participatingOfficerStats.length
       : 0;
 
-    const officerClassMap = buildOfficerClassMap(normalizedOfficers);
+    const officerClassMap = buildOfficerClassMap(activeOfficers);
     const consumerLaneEntries = participatingOfficerStats.filter((entry) => officerClassMap[entry.officer] === 'C');
     const flexEntries = participatingOfficerStats.filter((entry) => officerClassMap[entry.officer] === 'F');
     const mortgageLaneEntries = participatingOfficerStats.filter((entry) => officerClassMap[entry.officer] === 'M');
@@ -750,7 +752,7 @@ Object.entries(typeBreakdown).filter(([typeName]) => isMortgageTypeName(typeName
     );
 
     const context = {
-      officers: normalizedOfficers,
+      officers: activeOfficers,
       officerStats: participatingOfficerStats,
       categoryMetrics,
       mortgageByOfficer,
