@@ -568,6 +568,30 @@ test('stress summary includes attempted/suspicious/skipped/failure counts by eng
   fs.rmSync(outputDir, { recursive: true, force: true });
 });
 
+test('when feasibility analysis is enabled, review classifications sum to reviewCount', () => {
+  const outputDir = path.resolve(__dirname, '../stress_runs/test_review_feasibility_totals');
+  fs.rmSync(outputDir, { recursive: true, force: true });
+  execFileSync('node', [
+    path.resolve(__dirname, '../scripts/fairness_stress_runner.js'),
+    '--duration-minutes', '0.01',
+    '--max-iterations', '1',
+    '--seed-start', '8',
+    '--engine', 'both',
+    '--output', outputDir,
+    '--analyze-review-feasibility',
+    '--feasibility-budget', '3000'
+  ], { stdio: 'pipe' });
+
+  const summaryLog = fs.readFileSync(path.join(outputDir, 'summary.log'), 'utf8');
+  const summaryJsonText = summaryLog.trim().split('\n').slice(1).join('\n');
+  const summary = JSON.parse(summaryJsonText);
+  const reviewFeasibilityTotal = summary.avoidableReviewCount + summary.unavoidableReviewCount + summary.feasibilityUnknownCount;
+
+  assert.ok(summary.reviewCount > 0);
+  assert.equal(reviewFeasibilityTotal, summary.reviewCount);
+  fs.rmSync(outputDir, { recursive: true, force: true });
+});
+
 test('recordEngineCompletionOutcome increments PASS/REVIEW/UNKNOWN counters correctly', () => {
   const stats = {
     global: {
@@ -901,8 +925,60 @@ test('exact feasibility search returns unknown when budget is exhausted before e
     }
   };
   const run = { result: { fairnessEvaluation: { overallResult: 'REVIEW', metrics: { maxCountVariancePercent: 40, maxAmountVariancePercent: 0 } }, loanAssignments: [] } };
-  const feasibility = analyzeReviewFeasibility({ context, scenario, engine: 'global', run, reviewBasis: 'global_count_variance', evaluationBudget: 1 });
+  const feasibility = analyzeReviewFeasibility({
+    context,
+    scenario,
+    engine: 'global',
+    run,
+    reviewBasis: 'global_count_variance',
+    evaluationBudget: 1,
+    autoExpandExactSearchBudget: false
+  });
   assert.equal(feasibility.classification, 'feasibility_unknown_budget_exhausted');
+});
+
+test('exact feasibility search auto-expands budget to prove unavoidable when the full state space is tractable', () => {
+  const scenario = {
+    officers: [
+      { name: 'A', isOnVacation: false, eligibility: { consumer: true, mortgage: false } },
+      { name: 'B', isOnVacation: false, eligibility: { consumer: true, mortgage: false } }
+    ],
+    loans: [
+      { name: 'L1', type: 'Personal', amountRequested: 10000 },
+      { name: 'L2', type: 'Personal', amountRequested: 10000 }
+    ],
+    runningTotals: { officers: {} }
+  };
+  const context = {
+    isOfficerEligibleForLoanType: () => true,
+    getOfficerStatsFromResult(result) {
+      return Object.entries(result.officerAssignments).map(([officer, assigned]) => ({
+        officer,
+        totalLoans: assigned.length,
+        totalAmount: assigned.length * 10000
+      }));
+    },
+    FairnessEngineService: {
+      evaluateFairness() {
+        return {
+          overallResult: 'REVIEW',
+          statusMetricDescriptor: { key: 'global_count_variance', valuePercent: 40 },
+          metrics: { maxCountVariancePercent: 40, maxAmountVariancePercent: 0 }
+        };
+      }
+    }
+  };
+  const run = { result: { fairnessEvaluation: { overallResult: 'REVIEW', metrics: { maxCountVariancePercent: 40, maxAmountVariancePercent: 0 } }, loanAssignments: [] } };
+  const feasibility = analyzeReviewFeasibility({
+    context,
+    scenario,
+    engine: 'global',
+    run,
+    reviewBasis: 'global_count_variance',
+    evaluationBudget: 1
+  });
+  assert.equal(feasibility.classification, 'unavoidable_review');
+  assert.equal(feasibility.feasibilityEvaluationsRun, 4);
 });
 
 test('feasibility analyzer marks larger budget-exhausted search as feasibility_unknown_budget_exhausted', () => {

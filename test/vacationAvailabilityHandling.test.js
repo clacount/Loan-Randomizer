@@ -150,7 +150,7 @@ test('vacationed officer receives no assignment while active officers continue t
   );
 });
 
-test('officer-lane assignment keeps vacationed officer fairness context without assigning new loans', () => {
+test('officer-lane assignment keeps vacationed officer context without counting vacationed officers in active fairness denominators', () => {
   const context = loadAppContext(29);
   context.FairnessEngineService.setSelectedFairnessEngine('officer_lane');
   const officers = [
@@ -184,10 +184,11 @@ test('officer-lane assignment keeps vacationed officer fairness context without 
   assert.equal(statsByOfficer.M1.totalLoans, 12);
   assert.equal(statsByOfficer.M1.mortgageAmount, 900000);
 
-  assert.equal(result.fairnessEvaluation.roleAwareFlags.helocOnlySupportThresholdsApplied, true);
-  assert.equal(result.fairnessEvaluation.metrics.averageLoanCount, 6);
-  assert.equal(result.fairnessEvaluation.metrics.averageDollarAmount, 600000);
-  assert.equal(result.fairnessEvaluation.overallResult, 'REVIEW');
+  assert.equal(result.fairnessEvaluation.roleAwareFlags.helocOnlySupportThresholdsApplied, false);
+  assert.equal(result.fairnessEvaluation.metrics.averageLoanCount, 3);
+  assert.equal(result.fairnessEvaluation.metrics.averageDollarAmount, 450000);
+  assert.equal(result.fairnessEvaluation.metrics.flexVariance.officerCount, 2);
+  assert.equal(result.fairnessEvaluation.overallResult, 'PASS');
 });
 
 test('all-vacation scenario returns clear active-officer validation error', () => {
@@ -202,7 +203,7 @@ test('all-vacation scenario returns clear active-officer validation error', () =
   assert.equal(result.error, 'Please add at least one active loan officer.');
 });
 
-test('fairness denominator includes vacationed officers for policy/stat context', () => {
+test('fairness denominator excludes vacationed officers from active variance calculations', () => {
   const context = loadAppContext(19);
   const evaluation = context.FairnessEngineService.evaluateFairness({
     engineType: 'global',
@@ -234,10 +235,10 @@ test('fairness denominator includes vacationed officers for policy/stat context'
     ]
   });
 
-  assert.equal(evaluation.metrics.averageLoanCount, 5);
-  assert.equal(evaluation.metrics.averageDollarAmount, 50000);
-  assert.equal(evaluation.metrics.maxCountVariancePercent, 100);
-  assert.equal(evaluation.metrics.maxAmountVariancePercent, 100);
+  assert.equal(evaluation.metrics.averageLoanCount, 10);
+  assert.equal(evaluation.metrics.averageDollarAmount, 100000);
+  assert.equal(evaluation.metrics.maxCountVariancePercent, 0);
+  assert.equal(evaluation.metrics.maxAmountVariancePercent, 0);
 });
 
 test('non-vacation assignment behavior is unchanged versus default officer config', () => {
