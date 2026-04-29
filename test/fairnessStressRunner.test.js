@@ -1291,7 +1291,8 @@ test('candidate officer eligibility enforces vacation, mortgage override, and HE
       { name: 'C1', isOnVacation: false, eligibility: { consumer: true, mortgage: false } },
       { name: 'F1', isOnVacation: false, eligibility: { consumer: true, mortgage: true }, mortgageOverride: false },
       { name: 'F2', isOnVacation: false, eligibility: { consumer: true, mortgage: true }, mortgageOverride: true },
-      { name: 'M1', isOnVacation: false, eligibility: { consumer: false, mortgage: true } },
+      { name: 'M1', isOnVacation: false, eligibility: { consumer: false, mortgage: true }, excludeHeloc: true },
+      { name: 'M2', isOnVacation: false, eligibility: { consumer: false, mortgage: true } },
       { name: 'VAC', isOnVacation: true, eligibility: { consumer: false, mortgage: true } }
     ],
     loans: [],
@@ -1313,9 +1314,9 @@ test('candidate officer eligibility enforces vacation, mortgage override, and HE
   const homeRefiEligible = getCandidateOfficerNamesForLoan({ context, scenario, loan: { type: 'Home Refi' }, engine: 'officer_lane' });
 
   assert.deepEqual(new Set(personalEligible), new Set(['C1', 'F1', 'F2']));
-  assert.deepEqual(new Set(helocEligible), new Set(['F1', 'F2', 'M1']));
-  assert.deepEqual(new Set(firstMortgageEligible), new Set(['F2', 'M1']));
-  assert.deepEqual(new Set(homeRefiEligible), new Set(['F2', 'M1']));
+  assert.deepEqual(new Set(helocEligible), new Set(['F1', 'F2', 'M2']));
+  assert.deepEqual(new Set(firstMortgageEligible), new Set(['F2', 'M1', 'M2']));
+  assert.deepEqual(new Set(homeRefiEligible), new Set(['F2', 'M1', 'M2']));
 });
 
 test('HELOC support detection uses full officer context (including vacationed officers) while feasibility remains unknown when weighted recomputation is unavailable', () => {

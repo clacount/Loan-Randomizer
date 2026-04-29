@@ -1065,6 +1065,9 @@ function getCandidateOfficerNamesForLoan({ context = {}, scenario = {}, loan = {
         if (!eligibility.mortgage || (!eligibility.consumer && !eligibility.mortgage)) {
           return false;
         }
+        if (mortgagePermissionLevel === 'heloc' && officer.excludeHeloc) {
+          return false;
+        }
         const isFlex = eligibility.consumer && eligibility.mortgage;
         if (mortgagePermissionLevel !== 'heloc' && isFlex && !officer.mortgageOverride) {
           return false;

@@ -65,6 +65,7 @@
       name: String(officerConfig.name || '').trim(),
       eligibility,
       mortgageOverride: Boolean(officerConfig.mortgageOverride),
+      excludeHeloc: Boolean(officerConfig.excludeHeloc),
       isOnVacation: Boolean(officerConfig.isOnVacation)
     };
   }
