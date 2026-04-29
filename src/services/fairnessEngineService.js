@@ -89,6 +89,11 @@
     return getOfficerClassCode(officerConfig) === 'M';
   }
 
+  function isHelocEligibleMortgageOnlyOfficer(officerConfig = {}) {
+    const normalizedOfficer = normalizeOfficer(officerConfig);
+    return isMortgageOnlyOfficer(normalizedOfficer) && !normalizedOfficer.excludeHeloc;
+  }
+
   function hasSingleMortgageOnlyOfficer(officers = []) {
     return officers.filter((officer) => isMortgageOnlyOfficer(officer)).length === 1;
   }
@@ -206,11 +211,9 @@
       return true;
     }
 
-    if (context.allowBroadFlexMortgageCoverage || loanTypeConfig.allowFlexMortgage === true) {
-      return true;
-    }
+    return !!(context.allowBroadFlexMortgageCoverage || loanTypeConfig.allowFlexMortgage === true);
 
-    return false;
+
   }
 
   function isFlexMortgageParticipationExpected(context = {}) {
@@ -292,7 +295,7 @@
 
   function isHomogeneousHelocSupportPool({ officers = [], hasConsumerLoans = false, loanTypeNames = [] } = {}) {
     const normalizedOfficers = Array.isArray(officers) ? officers.map((officer) => normalizeOfficer(officer)) : [];
-    const hasMortgageOnlyOfficer = normalizedOfficers.some((officer) => isMortgageOnlyOfficer(officer));
+    const hasMortgageOnlyOfficer = normalizedOfficers.some((officer) => isHelocEligibleMortgageOnlyOfficer(officer));
     const hasFlexOfficer = normalizedOfficers.some((officer) => isFlexOfficer(officer));
     if (!hasMortgageOnlyOfficer || !hasFlexOfficer) {
       return false;
@@ -335,6 +338,7 @@
       getOfficerClassCode,
       isFlexOfficer,
       isMortgageOnlyOfficer,
+      isHelocEligibleMortgageOnlyOfficer,
       hasSingleMortgageOnlyOfficer,
       buildOfficerClassMap,
       buildLaneBreakdownText,
@@ -380,7 +384,27 @@
     const officerClassMap = buildOfficerClassMap(activeOfficers);
     const consumerLaneEntries = participatingOfficerStats.filter((entry) => officerClassMap[entry.officer] === 'C');
     const flexEntries = participatingOfficerStats.filter((entry) => officerClassMap[entry.officer] === 'F');
-    const mortgageLaneEntries = participatingOfficerStats.filter((entry) => officerClassMap[entry.officer] === 'M');
+    const observedLoanTypeNames = [
+      ...new Set(participatingOfficerStats.flatMap((entry) => (
+        Object.entries(entry.typeBreakdown || {})
+          .filter(([, count]) => (Number(count) || 0) > 0)
+          .map(([typeName]) => typeName)
+      )))
+    ];
+    const hasConsumerLoans = participatingOfficerStats.some((entry) => (Number(entry.consumerLoanCount) || 0) > 0);
+    const isHelocOnlyMortgageRun = !hasConsumerLoans
+      && observedLoanTypeNames.length > 0
+      && observedLoanTypeNames.every((typeName) => String(typeName || '').trim().toLowerCase() === 'heloc');
+    const mortgageLaneEntries = participatingOfficerStats.filter((entry) => {
+      if (officerClassMap[entry.officer] !== 'M') {
+        return false;
+      }
+      if (!isHelocOnlyMortgageRun) {
+        return true;
+      }
+      const officerConfig = activeOfficers.find((officer) => officer.name === entry.officer);
+      return isHelocEligibleMortgageOnlyOfficer(officerConfig);
+    });
 
     const consumerEntries = normalizedEngine === FAIRNESS_ENGINES.OFFICER_LANE
       ? (consumerLaneEntries.length ? consumerLaneEntries : participatingOfficerStats)
