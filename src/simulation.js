@@ -77,7 +77,8 @@
             consumer: row.dataset.weightConsumer,
             mortgage: row.dataset.weightMortgage
           }, eligibility),
-          mortgageOverride: row.dataset.mortgageOverride === 'true'
+          mortgageOverride: row.dataset.mortgageOverride === 'true',
+          excludeHeloc: row.dataset.excludeHeloc === 'true'
         };
       })
       .filter((entry) => entry.name);
@@ -203,7 +204,8 @@
       vacationDays: 0,
       eligibility,
       weights: loanCategoryUtils.getDefaultWeightsForScope(loanCategoryUtils.getOfficerScopeFromConfig(eligibility)),
-      mortgageOverride: false
+      mortgageOverride: false,
+      excludeHeloc: false
     });
     if (simulationOfficerNameInput) {
       simulationOfficerNameInput.value = '';
@@ -851,7 +853,8 @@
         vacationDays: Number.isFinite(entry.vacationDays) ? Math.max(0, Math.trunc(entry.vacationDays)) : 0,
         eligibility: loanCategoryUtils.normalizeOfficerEligibility(entry.eligibility),
         weights: loanCategoryUtils.normalizeOfficerWeights(entry.weights, entry.eligibility),
-        mortgageOverride: Boolean(entry.mortgageOverride)
+        mortgageOverride: Boolean(entry.mortgageOverride),
+        excludeHeloc: Boolean(entry.excludeHeloc)
       }))
       .filter((entry) => entry.name);
 

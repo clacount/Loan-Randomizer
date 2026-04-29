@@ -109,6 +109,17 @@ test('fairness metrics keep HELOC weighted variance null when optimization metri
   assert.equal(evaluation.statusMetricDescriptor?.valuePercent, null);
 });
 
+test('HELOC support pool detection ignores mortgage-only officers excluded from HELOC assignment', () => {
+  assert.equal(global.FairnessEngineService.isHomogeneousHelocSupportPool({
+    officers: [
+      { name: 'F1', eligibility: { consumer: true, mortgage: true } },
+      { name: 'M1', eligibility: { consumer: false, mortgage: true }, excludeHeloc: true }
+    ],
+    hasConsumerLoans: false,
+    loanTypeNames: ['heloc']
+  }), false);
+});
+
 test('homogeneous HELOC support pool remains REVIEW when flex variance exceeds 25%', () => {
   const evaluation = global.FairnessEngineService.evaluateFairness({
     engineType: 'officer_lane',

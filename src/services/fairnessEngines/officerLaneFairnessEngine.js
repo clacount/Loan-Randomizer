@@ -10,6 +10,7 @@
       this.getOfficerClassCode = dependencies.getOfficerClassCode;
       this.isFlexOfficer = dependencies.isFlexOfficer;
       this.isMortgageOnlyOfficer = dependencies.isMortgageOnlyOfficer;
+      this.isHelocEligibleMortgageOnlyOfficer = dependencies.isHelocEligibleMortgageOnlyOfficer;
       this.hasSingleMortgageOnlyOfficer = dependencies.hasSingleMortgageOnlyOfficer;
       this.buildOfficerClassMap = dependencies.buildOfficerClassMap;
       this.buildLaneBreakdownText = dependencies.buildLaneBreakdownText;
@@ -44,11 +45,9 @@
         return false;
       }
 
-      if (this.isSingleMloExpectedVarianceScenario(context)) {
-        return false;
-      }
+      return !this.isSingleMloExpectedVarianceScenario(context);
 
-      return true;
+
     }
 
     determineOfficerLaneOverallPass(context = {}) {
@@ -74,13 +73,39 @@
       const normalizedOfficers = officers.map((officer) => this.normalizeOfficer(officer));
       const officerClassMap = this.buildOfficerClassMap(normalizedOfficers);
       const consumerLaneEntries = officerStats.filter((entry) => officerClassMap[entry.officer] === 'C');
-      const mortgageOfficers = normalizedOfficers.filter((officer) => this.isMortgageOnlyOfficer(officer)).map((officer) => officer.name);
       const flexOfficers = normalizedOfficers.filter((officer) => this.isFlexOfficer(officer)).map((officer) => officer.name);
       const hasConsumerLane = normalizedOfficers.some((officer) => this.getOfficerClassCode(officer) === 'C');
-      const hasMortgageLane = normalizedOfficers.some((officer) => this.getOfficerClassCode(officer) === 'M');
       const hasFlexLane = normalizedOfficers.some((officer) => this.getOfficerClassCode(officer) === 'F');
+      const totalConsumerLoans = officerStats.reduce((sum, entry) => sum + (Number(entry.consumerLoanCount) || 0), 0);
+      const allMortgageTypes = officerStats
+        .flatMap((entry) => Object.entries(entry.typeBreakdown || {}))
+        .filter(([, count]) => (Number(count) || 0) > 0)
+        .map(([typeName]) => String(typeName || '').trim().toLowerCase());
+      const isHelocOnlyMortgageRun = totalConsumerLoans === 0
+        && allMortgageTypes.length > 0
+        && allMortgageTypes.every((typeName) => typeName === 'heloc');
+      const isHelocOnlySupportPool = this.isHomogeneousHelocSupportPool({
+        officers: normalizedOfficers,
+        hasConsumerLoans: totalConsumerLoans > 0,
+        loanTypeNames: allMortgageTypes
+      });
+      const mortgageOfficers = normalizedOfficers
+        .filter((officer) => (
+          isHelocOnlyMortgageRun
+            ? this.isHelocEligibleMortgageOnlyOfficer(officer)
+            : this.isMortgageOnlyOfficer(officer)
+        ))
+        .map((officer) => officer.name);
+      const hasMortgageLane = mortgageOfficers.length > 0;
 
-      const activeMortgageOnlyOfficerCount = normalizedOfficers.filter((officer) => this.isMortgageOnlyOfficer(officer) && !officer.isOnVacation).length;
+      const activeMortgageOnlyOfficerCount = normalizedOfficers.filter((officer) => (
+        !officer.isOnVacation
+        && (
+          isHelocOnlyMortgageRun
+            ? this.isHelocEligibleMortgageOnlyOfficer(officer)
+            : this.isMortgageOnlyOfficer(officer)
+        )
+      )).length;
       const hasAnyMortgageOnlyOfficer = mortgageOfficers.length > 0;
       const allowBroadFlexMortgageCoverage = normalizedOfficers.some((officer) => this.isFlexOfficer(officer) && officer.mortgageOverride);
 
@@ -103,16 +128,6 @@
         allowBroadFlexMortgageCoverage
       });
 
-      const totalConsumerLoans = officerStats.reduce((sum, entry) => sum + (Number(entry.consumerLoanCount) || 0), 0);
-      const allMortgageTypes = officerStats
-        .flatMap((entry) => Object.entries(entry.typeBreakdown || {}))
-        .filter(([, count]) => (Number(count) || 0) > 0)
-        .map(([typeName]) => String(typeName || '').trim().toLowerCase());
-      const isHelocOnlySupportPool = this.isHomogeneousHelocSupportPool({
-        officers: normalizedOfficers,
-        hasConsumerLoans: totalConsumerLoans > 0,
-        loanTypeNames: allMortgageTypes
-      });
       const helocSupportThresholds = this.evaluateHelocSupportFlexThresholds(categoryMetrics.flexVariance);
       const optimizationMetrics = context.optimizationMetrics || {};
       const parsedHelocWeightedVariancePercent = Number(optimizationMetrics.helocWeightedVariancePercent);

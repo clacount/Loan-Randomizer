@@ -68,6 +68,8 @@ const officerEditorConsumerWeightLabel = document.getElementById('officerEditorC
 const officerEditorMortgageWeightLabel = document.getElementById('officerEditorMortgageWeightLabel');
 const officerEditorMortgageOverrideInput = document.getElementById('officerEditorMortgageOverrideInput');
 const officerEditorMortgageOverrideLabel = document.getElementById('officerEditorMortgageOverrideLabel');
+const officerEditorExcludeHelocInput = document.getElementById('officerEditorExcludeHelocInput');
+const officerEditorExcludeHelocLabel = document.getElementById('officerEditorExcludeHelocLabel');
 const officerEditorModalMessageEl = document.getElementById('officerEditorModalMessage');
 
 const addLoanTypeBtn = document.getElementById('addLoanTypeBtn');
@@ -1133,7 +1135,7 @@ function isOfficerEligibleForLoanType(officerConfig, loan) {
   const mortgagePermissionLevel = getMortgageLoanPermissionLevel(loan.type);
 
   if (mortgagePermissionLevel === 'heloc') {
-    return true;
+    return !officerConfig.excludeHeloc;
   }
 
   return hasMortgageOnlyPermissions || hasOverride;
@@ -1246,7 +1248,8 @@ function getOfficerConfigFromRow(row) {
     return {
       eligibility: loanCategoryUtils.getDefaultOfficerEligibility(),
       weights: loanCategoryUtils.getDefaultOfficerWeights(),
-      mortgageOverride: false
+      mortgageOverride: false,
+      excludeHeloc: false
     };
   }
 
@@ -1259,8 +1262,9 @@ function getOfficerConfigFromRow(row) {
     mortgage: row.dataset.weightMortgage
   }, eligibility);
   const mortgageOverride = row.dataset.mortgageOverride === 'true';
+  const excludeHeloc = row.dataset.excludeHeloc === 'true';
 
-  return { eligibility, weights, mortgageOverride };
+  return { eligibility, weights, mortgageOverride, excludeHeloc };
 }
 
 function getOfficerNameFromRow(row) {
@@ -1466,24 +1470,32 @@ function syncOfficerEditorFromClassPreset() {
   }
 
   if (officerEditorMortgageOverrideLabel && officerEditorMortgageOverrideInput) {
-    const presetEligibility = loanCategoryUtils.normalizeOfficerEligibility(preset?.eligibility);
-    const isMortgageOnlyPreset = presetEligibility.mortgage && !presetEligibility.consumer && selectedPreset !== 'custom';
-    const supportsOverride = presetEligibility.mortgage && !isMortgageOnlyPreset;
+    const supportsOverride = selectedPreset === 'balanced' || selectedPreset === 'consumer-focused' || selectedPreset === 'mortgage-focused' || selectedPreset === 'custom';
     officerEditorMortgageOverrideLabel.hidden = !supportsOverride;
     officerEditorMortgageOverrideInput.disabled = !supportsOverride;
     if (!supportsOverride) {
       officerEditorMortgageOverrideInput.checked = false;
     }
   }
+
+  if (officerEditorExcludeHelocLabel && officerEditorExcludeHelocInput) {
+    const supportsHelocExclusion = selectedPreset === 'balanced' || selectedPreset === 'mortgage-focused' || selectedPreset === 'mortgage-only' || selectedPreset === 'custom';
+    officerEditorExcludeHelocLabel.hidden = !supportsHelocExclusion;
+    officerEditorExcludeHelocInput.disabled = !supportsHelocExclusion;
+    if (!supportsHelocExclusion) {
+      officerEditorExcludeHelocInput.checked = false;
+    }
+  }
 }
 
-function applyOfficerConfigToRow(row, { name, eligibility, weights, mortgageOverride = false }) {
+function applyOfficerConfigToRow(row, { name, eligibility, weights, mortgageOverride = false, excludeHeloc = false }) {
   row.dataset.officerName = String(name || '').trim();
   row.dataset.eligibilityConsumer = String(Boolean(eligibility.consumer));
   row.dataset.eligibilityMortgage = String(Boolean(eligibility.mortgage));
   row.dataset.weightConsumer = String(weights.consumer);
   row.dataset.weightMortgage = String(weights.mortgage);
   row.dataset.mortgageOverride = String(Boolean(mortgageOverride));
+  row.dataset.excludeHeloc = String(Boolean(excludeHeloc));
 
   const nameEl = row.querySelector('.officer-name-value');
   if (nameEl) {
@@ -1504,7 +1516,8 @@ function openOfficerEditorModal(row = null) {
   const rowConfig = row ? getOfficerConfigFromRow(row) : {
     eligibility: OFFICER_CLASS_PRESETS.balanced.eligibility,
     weights: OFFICER_CLASS_PRESETS.balanced.weights,
-    mortgageOverride: false
+    mortgageOverride: false,
+    excludeHeloc: false
   };
   const rowClass = getClassPresetFromConfig(rowConfig.eligibility, rowConfig.weights);
 
@@ -1522,6 +1535,9 @@ function openOfficerEditorModal(row = null) {
   }
   if (officerEditorMortgageOverrideInput) {
     officerEditorMortgageOverrideInput.checked = Boolean(rowConfig.mortgageOverride);
+  }
+  if (officerEditorExcludeHelocInput) {
+    officerEditorExcludeHelocInput.checked = Boolean(rowConfig.excludeHeloc);
   }
 
   if (removeOfficerBtn) {
@@ -1585,6 +1601,7 @@ function createInputRow(type, value = '', loanType = '', amount = '', isOnVacati
   row.dataset.weightConsumer = '1';
   row.dataset.weightMortgage = '1';
   row.dataset.mortgageOverride = 'false';
+  row.dataset.excludeHeloc = 'false';
 
   const nameEl = document.createElement('div');
   nameEl.className = 'officer-name-value';
@@ -1629,7 +1646,8 @@ function createInputRow(type, value = '', loanType = '', amount = '', isOnVacati
     name: value,
     eligibility: normalizedEligibility,
     weights: normalizedWeights,
-    mortgageOverride: Boolean(officerConfig.mortgageOverride)
+    mortgageOverride: Boolean(officerConfig.mortgageOverride),
+    excludeHeloc: Boolean(officerConfig.excludeHeloc)
   });
   return row;
 }
@@ -1681,7 +1699,8 @@ function getOfficerValues() {
     .map((officer) => ({
       ...officer,
       eligibility: loanCategoryUtils.normalizeOfficerEligibility(officer.eligibility),
-      weights: loanCategoryUtils.normalizeOfficerWeights(officer.weights, officer.eligibility)
+      weights: loanCategoryUtils.normalizeOfficerWeights(officer.weights, officer.eligibility),
+      excludeHeloc: Boolean(officer.excludeHeloc)
     }))
     .filter(Boolean);
 }
@@ -3035,7 +3054,8 @@ function createEmptyOfficerStats() {
     typeCounts: Object.fromEntries(getAllLoanTypeNames().map((loanType) => [loanType, 0])),
     eligibility: defaultEligibility,
     weights: loanCategoryUtils.getDefaultWeightsForScope(loanCategoryUtils.getOfficerScopeFromConfig(defaultEligibility)),
-    mortgageOverride: false
+    mortgageOverride: false,
+    excludeHeloc: false
   };
 }
 
@@ -3667,7 +3687,7 @@ function normalizeTypeCounts(typeCounts = {}) {
 
 function buildRunningTotalsCsv(runningTotals) {
   const rows = [
-    'officer,is_on_vacation,active_session_count,loan_count,total_amount_requested,type_counts_json,eligibility_json,weights_json,mortgage_override'
+    'officer,is_on_vacation,active_session_count,loan_count,total_amount_requested,type_counts_json,eligibility_json,weights_json,mortgage_override,exclude_heloc'
   ];
 
   Object.entries(runningTotals.officers || {})
@@ -3683,7 +3703,8 @@ function buildRunningTotalsCsv(runningTotals) {
         JSON.stringify(normalizedStats.typeCounts),
         JSON.stringify(normalizedStats.eligibility),
         JSON.stringify(normalizedStats.weights),
-        normalizedStats.mortgageOverride
+        normalizedStats.mortgageOverride,
+        normalizedStats.excludeHeloc
       ].map(escapeCsvValue).join(','));
     });
 
@@ -3747,7 +3768,8 @@ function parseRunningTotalsCsv(csvText) {
       typeCounts: parsedTypeCounts,
       eligibility: parsedEligibility,
       weights: parsedWeights,
-      mortgageOverride: String(row.mortgage_override).toLowerCase() === 'true'
+      mortgageOverride: String(row.mortgage_override).toLowerCase() === 'true',
+      excludeHeloc: String(row.exclude_heloc).toLowerCase() === 'true'
     });
   });
 
@@ -3768,7 +3790,8 @@ function populateOfficersFromRunningTotals(runningTotals) {
     addOfficer(officer, normalizedStats.isOnVacation, {
       eligibility: normalizedStats.eligibility,
       weights: normalizedStats.weights,
-      mortgageOverride: normalizedStats.mortgageOverride
+      mortgageOverride: normalizedStats.mortgageOverride,
+      excludeHeloc: normalizedStats.excludeHeloc
     });
   });
 
@@ -3798,7 +3821,8 @@ function appendOfficersFromRunningTotals(runningTotals) {
     addOfficer(officer, normalizedStats.isOnVacation, {
       eligibility: normalizedStats.eligibility,
       weights: normalizedStats.weights,
-      mortgageOverride: normalizedStats.mortgageOverride
+      mortgageOverride: normalizedStats.mortgageOverride,
+      excludeHeloc: normalizedStats.excludeHeloc
     });
     existingOfficerNames.add(officer);
     importedCount += 1;
@@ -3828,7 +3852,8 @@ function normalizeOfficerStats(stats) {
     typeCounts: normalizeTypeCounts(stats.typeCounts || {}),
     eligibility: loanCategoryUtils.normalizeOfficerEligibility(stats.eligibility),
     weights: loanCategoryUtils.normalizeOfficerWeights(stats.weights, stats.eligibility),
-    mortgageOverride: Boolean(stats.mortgageOverride)
+    mortgageOverride: Boolean(stats.mortgageOverride),
+    excludeHeloc: Boolean(stats.excludeHeloc)
   };
 }
 
@@ -3851,7 +3876,8 @@ function buildRunningTotalsWithCurrentOfficerStatuses(priorRunningTotals) {
       isOnVacation: row.dataset.active === 'false',
       eligibility: officerConfig.eligibility,
       weights: officerConfig.weights,
-      mortgageOverride: officerConfig.mortgageOverride
+      mortgageOverride: officerConfig.mortgageOverride,
+      excludeHeloc: officerConfig.excludeHeloc
     };
   });
 
@@ -3929,6 +3955,7 @@ function buildUpdatedRunningTotals(cleanOfficers, result, priorRunningTotals) {
     nextStats.eligibility = officerConfig.eligibility;
     nextStats.weights = officerConfig.weights;
     nextStats.mortgageOverride = officerConfig.mortgageOverride;
+    nextStats.excludeHeloc = officerConfig.excludeHeloc;
 
     assignedLoans.forEach((loan) => {
       if (nextStats.typeCounts[loan.type] === undefined) {
@@ -4144,6 +4171,7 @@ function normalizeOfficerConfig(officer) {
       eligibility: loanCategoryUtils.getDefaultOfficerEligibility(),
       weights: loanCategoryUtils.getDefaultOfficerWeights(),
       mortgageOverride: false,
+      excludeHeloc: false,
       isOnVacation: false
     };
   }
@@ -4152,9 +4180,10 @@ function normalizeOfficerConfig(officer) {
   const eligibility = loanCategoryUtils.normalizeOfficerEligibility(officer?.eligibility);
   const weights = loanCategoryUtils.normalizeOfficerWeights(officer?.weights, eligibility);
   const mortgageOverride = Boolean(officer?.mortgageOverride);
+  const excludeHeloc = Boolean(officer?.excludeHeloc);
   const isOnVacation = Boolean(officer?.isOnVacation);
 
-  return { name, eligibility, weights, mortgageOverride, isOnVacation };
+  return { name, eligibility, weights, mortgageOverride, excludeHeloc, isOnVacation };
 }
 
 function getNormalizedFairnessValue(total, activeSessionCount) {
@@ -6577,7 +6606,8 @@ saveOfficerEditorBtn?.addEventListener('click', () => {
       consumer: consumerWeight,
       mortgage: mortgageWeight
     }, eligibility),
-    mortgageOverride: Boolean(officerEditorMortgageOverrideInput?.checked)
+    mortgageOverride: Boolean(officerEditorMortgageOverrideInput?.checked),
+    excludeHeloc: Boolean(officerEditorExcludeHelocInput?.checked)
   });
 
   if (!activeOfficerEditRow) {

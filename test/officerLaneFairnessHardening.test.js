@@ -68,6 +68,27 @@ test('officer-lane excludes vacationed mortgage-only officers from active HELOC-
   assert.equal(evaluation.metrics.helocWeightedVariancePercent, 18);
 });
 
+test('officer-lane excludes HELOC-disabled mortgage-only officers from HELOC-only support fairness', () => {
+  const evaluation = evaluate({
+    officers: [
+      { name: 'M1', eligibility: { consumer: false, mortgage: true }, excludeHeloc: true },
+      { name: 'F1', eligibility: { consumer: true, mortgage: true } },
+      { name: 'F2', eligibility: { consumer: true, mortgage: true } }
+    ],
+    optimizationMetrics: { helocWeightedVariancePercent: 18 },
+    officerStats: [
+      { officer: 'M1', totalLoans: 0, totalAmount: 0, consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 0, mortgageAmount: 0, typeBreakdown: {} },
+      { officer: 'F1', totalLoans: 5, totalAmount: 250000, consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 5, mortgageAmount: 250000, typeBreakdown: { HELOC: 5 } },
+      { officer: 'F2', totalLoans: 5, totalAmount: 250000, consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 5, mortgageAmount: 250000, typeBreakdown: { HELOC: 5 } }
+    ]
+  });
+
+  assert.equal(evaluation.roleAwareFlags.helocOnlySupportThresholdsApplied, false);
+  assert.equal(evaluation.roleAwareFlags.flexParticipationExpected, true);
+  assert.equal(evaluation.overallResult, 'PASS');
+  assert.equal(evaluation.statusMetricDescriptor?.key, 'flex_lane_dollar_variance');
+});
+
 test('officer-lane REVIEW from mortgage variance does not report consumer status descriptor', () => {
   const evaluation = evaluate({
     officers: [

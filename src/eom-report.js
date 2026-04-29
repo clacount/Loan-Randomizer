@@ -63,7 +63,8 @@
           activeSessionCount: normalizedStats.activeSessionCount,
           isOnVacation: normalizedStats.isOnVacation,
           eligibility: normalizedStats.eligibility,
-          mortgageOverride: normalizedStats.mortgageOverride
+          mortgageOverride: normalizedStats.mortgageOverride,
+          excludeHeloc: normalizedStats.excludeHeloc
         };
       });
   }
@@ -86,7 +87,8 @@
           activeSessionCount: 0,
           isOnVacation: false,
           eligibility: officerConfig.eligibility,
-          mortgageOverride: officerConfig.mortgageOverride
+          mortgageOverride: officerConfig.mortgageOverride,
+          excludeHeloc: officerConfig.excludeHeloc
         });
       }
 
@@ -163,7 +165,8 @@
       officers: officerStats.map((entry) => ({
         name: entry.officer,
         eligibility: normalizeFairnessEligibility(entry.eligibility),
-        mortgageOverride: Boolean(entry.mortgageOverride)
+        mortgageOverride: Boolean(entry.mortgageOverride),
+        excludeHeloc: Boolean(entry.excludeHeloc)
       })),
       officerStats: officerFairnessStats
     });
