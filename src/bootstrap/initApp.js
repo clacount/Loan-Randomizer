@@ -609,11 +609,18 @@ function updateEntitlementUi() {
     }
   }
 
-  applyLockedControlState(
-    officerEditorClassSelect,
-    canUseMultiOfficerRoles,
-    'Multiple officer roles require Pro or Platinum.'
-  );
+  if (officerEditorClassSelect) {
+    officerEditorClassSelect.disabled = false;
+    officerEditorClassSelect.dataset.locked = canUseMultiOfficerRoles ? 'false' : 'partial';
+    officerEditorClassSelect.title = canUseMultiOfficerRoles
+      ? ''
+      : 'Basic allows Consumer Only officers. Choose Consumer Only to make legacy officers compliant.';
+    [...officerEditorClassSelect.options].forEach((option) => {
+      const isSingleRoleOption = option.value === 'consumer-only';
+      option.disabled = !canUseMultiOfficerRoles && !isSingleRoleOption;
+      option.title = option.disabled ? 'Multiple officer roles require Pro or Platinum.' : '';
+    });
+  }
 }
 
 function updateFairnessMethodologyCopy() {
@@ -1687,6 +1694,9 @@ function openOfficerEditorModal(row = null) {
 
   syncOfficerEditorFromClassPreset();
   setOfficerEditorModalMessage('');
+  if (!canUseFeature(entitlements?.FEATURES?.MULTI_OFFICER_ROLES) && rowClass !== 'consumer-only') {
+    setOfficerEditorModalMessage('This officer uses a Pro/Platinum role. Choose Consumer Only to save changes on Basic.', 'warning');
+  }
   officerEditorModalEl.hidden = false;
   officerEditorNameInput?.focus();
 }
