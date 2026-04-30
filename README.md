@@ -55,6 +55,14 @@ The app also keeps a CSV state file named `loan-randomizer-running-totals.csv` i
 - No install is needed.
 - This runs fully in the browser and can be shared as files.
 
+## Product tiers / entitlement foundation
+- LendingFair now has internal support for Basic, Pro, and Platinum tiers through a centralized entitlement layer.
+- Basic means consumer-loan assignment only using the Global fairness engine. Auto, Personal, Credit Card, and Collateralized are treated as consumer loans.
+- Pro unlocks mortgage loans, multiple officer roles, and Officer Lane Fairness.
+- Platinum is currently the default tier so all existing behavior remains available while productization continues.
+- Licensing and license-code activation are not implemented yet.
+- Future licensing can hydrate the current tier through the entitlement layer to unlock the right capabilities.
+
 ## Teams / SharePoint hosting notes
 - If this app is opened *inside* a SharePoint/Teams page frame, folder-picker APIs may be blocked by browser/embed security settings.
 - Recommended flow: open the app directly in Edge/Chrome (not embedded), then select a local OneDrive-synced folder that maps to the SharePoint document library.

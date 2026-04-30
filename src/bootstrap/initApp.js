@@ -92,6 +92,7 @@ const loanTypeEditorModalMessageEl = document.getElementById('loanTypeEditorModa
 
 const distributionDetailsEl = document.getElementById('distributionDetails');
 const distributionChartsEl = document.getElementById('distributionCharts');
+const entitlements = window.LendingFairEntitlements;
 
 const HEADER_LOGO_PATH = './custom_branding.png';
 const APP_BRANDING_LOGO_PATHS = [
@@ -534,6 +535,94 @@ function syncFairnessModelSelect() {
   fairnessModelSelectEl.value = getSelectedFairnessEngine();
 }
 
+function canUseFeature(feature) {
+  return !entitlements || entitlements.canUseFeature(feature);
+}
+
+function getTierValidationForRun(officers, loans) {
+  if (!entitlements?.validateTierForRun) {
+    return { valid: true };
+  }
+
+  return entitlements.validateTierForRun({
+    engineType: getSelectedFairnessEngine(),
+    officers,
+    loans
+  });
+}
+
+function applyLockedControlState(control, isAllowed, message) {
+  if (!control) {
+    return;
+  }
+
+  control.disabled = !isAllowed;
+  if (isAllowed) {
+    control.removeAttribute('title');
+    control.removeAttribute('aria-disabled');
+    control.dataset.locked = 'false';
+    return;
+  }
+
+  control.title = message;
+  control.setAttribute('aria-disabled', 'true');
+  control.dataset.locked = 'true';
+}
+
+function updateEntitlementUi() {
+  if (!entitlements) {
+    return;
+  }
+
+  const { FEATURES } = entitlements;
+  const canUseOfficerLane = entitlements.canUseFeature(FEATURES.OFFICER_LANE_ENGINE);
+  const canUseMortgageLoans = entitlements.canUseFeature(FEATURES.MORTGAGE_LOANS);
+  const canUseMultiOfficerRoles = entitlements.canUseFeature(FEATURES.MULTI_OFFICER_ROLES);
+  const canUseSimulation = entitlements.canUseFeature(FEATURES.SIMULATION);
+  const canUseEom = entitlements.canUseFeature(FEATURES.EOM_REPORT);
+
+  const officerLaneOption = fairnessModelSelectEl?.querySelector?.('option[value="officer_lane"]');
+  if (officerLaneOption) {
+    officerLaneOption.disabled = !canUseOfficerLane;
+    officerLaneOption.title = canUseOfficerLane ? '' : 'Officer Lane Fairness requires Pro or Platinum.';
+  }
+  if (!canUseOfficerLane && getSelectedFairnessEngine() === 'officer_lane') {
+    setSelectedFairnessEngine('global');
+    syncFairnessModelSelect();
+  }
+
+  applyLockedControlState(
+    document.getElementById('endOfMonthBtn'),
+    canUseEom,
+    'End-of-month reporting requires Pro or Platinum.'
+  );
+  applyLockedControlState(
+    document.getElementById('runSimulationBtn'),
+    canUseSimulation,
+    'Monthly fairness simulation requires Platinum.'
+  );
+
+  if (loanTypeEditorCategoryInput) {
+    const mortgageOption = loanTypeEditorCategoryInput.querySelector('option[value="mortgage"]');
+    if (mortgageOption) {
+      mortgageOption.disabled = !canUseMortgageLoans;
+    }
+  }
+
+  if (officerEditorClassSelect) {
+    officerEditorClassSelect.disabled = false;
+    officerEditorClassSelect.dataset.locked = canUseMultiOfficerRoles ? 'false' : 'partial';
+    officerEditorClassSelect.title = canUseMultiOfficerRoles
+      ? ''
+      : 'Basic allows Consumer Only officers. Choose Consumer Only to make legacy officers compliant.';
+    [...officerEditorClassSelect.options].forEach((option) => {
+      const isSingleRoleOption = option.value === 'consumer-only';
+      option.disabled = !canUseMultiOfficerRoles && !isSingleRoleOption;
+      option.title = option.disabled ? 'Multiple officer roles require Pro or Platinum.' : '';
+    });
+  }
+}
+
 function updateFairnessMethodologyCopy() {
   if (window.FairnessView?.updateFairnessMethodologyCopy) {
     window.FairnessView.updateFairnessMethodologyCopy({ engineType: getSelectedFairnessEngine() });
@@ -579,7 +668,8 @@ function renderScenarioEngineRecommendation() {
     });
   }
   if (applyRecommendedEngineBtn) {
-    applyRecommendedEngineBtn.hidden = !recommendation.isActionable || recommendation.matchesCurrent;
+    const canUseRecommendedEngine = !entitlements?.canUseEngine || entitlements.canUseEngine(recommendation.recommendedEngine);
+    applyRecommendedEngineBtn.hidden = !recommendation.isActionable || recommendation.matchesCurrent || !canUseRecommendedEngine;
     applyRecommendedEngineBtn.textContent = `Use ${recommendation.recommendedLabel}`;
     applyRecommendedEngineBtn.dataset.engine = recommendation.recommendedEngine;
   }
@@ -590,6 +680,8 @@ function renderScenarioEngineRecommendation() {
 }
 
 function refreshFairnessEngineUi() {
+  updateEntitlementUi();
+  refreshLoanTypeSelects();
   syncFairnessModelSelect();
   updateFairnessMethodologyCopy();
   renderScenarioEngineRecommendation();
@@ -1254,24 +1346,34 @@ function buildLoanTypeSelectOptions(typeSelect, selectedType = '') {
 
   const activeTypes = getActiveLoanTypeNames();
   const optionsToShow = getAllLoanTypeNames();
+  const allowedActiveTypes = activeTypes.filter((typeOption) => (
+    getLoanCategoryForType(typeOption) !== loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE
+    || canUseFeature(entitlements?.FEATURES?.MORTGAGE_LOANS)
+  ));
 
   optionsToShow.forEach((typeOption) => {
     const loanType = getLoanTypeByName(typeOption);
     const isActive = isLoanTypeActive(loanType);
+    const isMortgageLocked = getLoanCategoryForType(typeOption) === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE
+      && !canUseFeature(entitlements?.FEATURES?.MORTGAGE_LOANS);
     const option = document.createElement('option');
     option.value = typeOption;
-    option.textContent = isActive ? typeOption : `${typeOption} (inactive)`;
-    option.disabled = !isActive;
+    option.textContent = isMortgageLocked
+      ? `${typeOption} (requires Pro or Platinum)`
+      : (isActive ? typeOption : `${typeOption} (inactive)`);
+    option.disabled = !isActive || isMortgageLocked;
     option.selected = typeOption === selectedType;
     typeSelect.appendChild(option);
   });
 
   const selectedLoanType = getLoanTypeByName(typeSelect.value);
   const selectedTypeIsActive = isLoanTypeActive(selectedLoanType);
+  const selectedTypeIsAllowed = getLoanCategoryForType(typeSelect.value) !== loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE
+    || canUseFeature(entitlements?.FEATURES?.MORTGAGE_LOANS);
 
-  if ((!typeSelect.value || !selectedTypeIsActive) && activeTypes.length) {
-    if (!selectedType || selectedTypeIsActive) {
-      [typeSelect.value] = activeTypes;
+  if ((!typeSelect.value || !selectedTypeIsActive || !selectedTypeIsAllowed) && allowedActiveTypes.length) {
+    if (!selectedType || selectedTypeIsActive || !selectedTypeIsAllowed) {
+      [typeSelect.value] = allowedActiveTypes;
     }
   }
 }
@@ -1555,10 +1657,13 @@ function openOfficerEditorModal(row = null) {
 
   activeOfficerEditRow = row;
 
+  const defaultOfficerPreset = canUseFeature(entitlements?.FEATURES?.MULTI_OFFICER_ROLES)
+    ? OFFICER_CLASS_PRESETS.balanced
+    : OFFICER_CLASS_PRESETS['consumer-only'];
   const rowName = row ? getOfficerNameFromRow(row) : '';
   const rowConfig = row ? getOfficerConfigFromRow(row) : {
-    eligibility: OFFICER_CLASS_PRESETS.balanced.eligibility,
-    weights: OFFICER_CLASS_PRESETS.balanced.weights,
+    eligibility: defaultOfficerPreset.eligibility,
+    weights: defaultOfficerPreset.weights,
     mortgageOverride: false,
     excludeHeloc: false
   };
@@ -1589,6 +1694,9 @@ function openOfficerEditorModal(row = null) {
 
   syncOfficerEditorFromClassPreset();
   setOfficerEditorModalMessage('');
+  if (!canUseFeature(entitlements?.FEATURES?.MULTI_OFFICER_ROLES) && rowClass !== 'consumer-only') {
+    setOfficerEditorModalMessage('This officer uses a Pro/Platinum role. Choose Consumer Only to save changes on Basic.', 'warning');
+  }
   officerEditorModalEl.hidden = false;
   officerEditorNameInput?.focus();
 }
@@ -2209,6 +2317,11 @@ async function handleLoanTypeEditorSubmit(event) {
   const normalizedCategory = loanCategoryUtils.normalizeLoanCategory(loanTypeEditorCategoryInput?.value || 'consumer');
   const normalizedGoalMode = String(loanTypeEditorGoalModeInput?.value || 'amount').trim().toLowerCase();
   const isSeasonal = (loanTypeEditorAvailabilityInput?.value || 'always') === 'seasonal';
+
+  if (normalizedCategory === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE && !canUseFeature(entitlements?.FEATURES?.MORTGAGE_LOANS)) {
+    setLoanTypeEditorModalMessage('Mortgage loan support requires Pro or Platinum.', 'warning');
+    return;
+  }
 
   if (normalizedGoalMode !== 'amount' && normalizedGoalMode !== 'unit') {
     setLoanTypeEditorModalMessage('Goal mode must be amount or unit.', 'warning');
@@ -4921,26 +5034,28 @@ function buildPdfLines(result, officers, loans, generatedAt) {
     lines.push({ text: '', size: 11, gapAfter: 4 });
   });
 
-  const fairnessEvaluation = applyOptimizationSummaryToFairnessEvaluation(
-    result,
-    result.fairnessEvaluation || evaluateResultFairness(result)
-  );
-  lines.push({ text: 'Fairness Audit', size: 14, gapAfter: 10 });
-  lines.push({ text: `Fairness model: ${getSelectedFairnessEngineLabel()}`, size: 11, gapAfter: 4 });
-  lines.push({ text: `Overall fairness status: ${fairnessEvaluation.overallResult}`, size: 11, gapAfter: 4 });
-  fairnessEvaluation.summaryItems.forEach((item) => {
-    lines.push({ text: item, size: 11, gapAfter: 4 });
-  });
-  fairnessEvaluation.notes.forEach((note) => {
-    lines.push({ text: note, size: 10, gapAfter: 4 });
-  });
-  lines.push({ text: '', size: 11, gapAfter: 6 });
+  if (canUseFeature(entitlements?.FEATURES?.FAIRNESS_AUDIT_REPORT)) {
+    const fairnessEvaluation = applyOptimizationSummaryToFairnessEvaluation(
+      result,
+      result.fairnessEvaluation || evaluateResultFairness(result)
+    );
+    lines.push({ text: 'Fairness Audit', size: 14, gapAfter: 10 });
+    lines.push({ text: `Fairness model: ${getSelectedFairnessEngineLabel()}`, size: 11, gapAfter: 4 });
+    lines.push({ text: `Overall fairness status: ${fairnessEvaluation.overallResult}`, size: 11, gapAfter: 4 });
+    fairnessEvaluation.summaryItems.forEach((item) => {
+      lines.push({ text: item, size: 11, gapAfter: 4 });
+    });
+    fairnessEvaluation.notes.forEach((note) => {
+      lines.push({ text: note, size: 10, gapAfter: 4 });
+    });
+    lines.push({ text: '', size: 11, gapAfter: 6 });
 
-  result.fairnessAudit.forEach((entry) => {
-    lines.push({ text: `${entry.loan.name} (${entry.loan.type})`, size: 12, gapAfter: 4 });
-    lines.push({ text: `Chosen officer: ${entry.selectedOfficer}`, size: 11, indent: 16, gapAfter: 4 });
-    lines.push({ text: buildAuditExplanation(entry), size: 11, indent: 16, gapAfter: 8 });
-  });
+    result.fairnessAudit.forEach((entry) => {
+      lines.push({ text: `${entry.loan.name} (${entry.loan.type})`, size: 12, gapAfter: 4 });
+      lines.push({ text: `Chosen officer: ${entry.selectedOfficer}`, size: 11, indent: 16, gapAfter: 4 });
+      lines.push({ text: buildAuditExplanation(entry), size: 11, indent: 16, gapAfter: 8 });
+    });
+  }
 
   lines.push({ text: 'Officer Running Totals', size: 14, gapAfter: 10 });
 
@@ -4953,7 +5068,7 @@ function buildPdfLines(result, officers, loans, generatedAt) {
     });
   });
 
-  if (result.distributionCharts?.length) {
+  if (canUseFeature(entitlements?.FEATURES?.FAIRNESS_AUDIT_REPORT) && result.distributionCharts?.length) {
     lines.push({ text: '', size: 11, gapAfter: 8 });
     lines.push({ text: 'Distribution Snapshot', size: 14, gapAfter: 10 });
     lines.push({ text: '__DISTRIBUTION_CHARTS__', size: 11, gapAfter: 0 });
@@ -6087,6 +6202,17 @@ function assignLoans(officers, loans, runningTotals = { officers: {} }) {
     .filter((loan) => loan.name)
     .filter((loan) => activeLoanTypes.includes(loan.type));
 
+  const tierValidation = getTierValidationForRun(
+    activeOfficers,
+    cleanLoans.map((loan) => ({
+      ...loan,
+      category: getLoanCategoryForType(loan.type)
+    }))
+  );
+  if (!tierValidation.valid) {
+    return { error: tierValidation.message };
+  }
+
   const loanCount = cleanLoans.length;
   const officerCount = uniqueOfficers.length;
   const activeOfficerCount = cleanOfficerNames.length;
@@ -6625,6 +6751,11 @@ saveOfficerEditorBtn?.addEventListener('click', () => {
   }
 
   const classValue = officerEditorClassSelect?.value || 'balanced';
+  if (!canUseFeature(entitlements?.FEATURES?.MULTI_OFFICER_ROLES) && classValue !== 'consumer-only') {
+    setOfficerEditorModalMessage('Multiple officer roles require Pro or Platinum.', 'warning');
+    return;
+  }
+
   const classPreset = OFFICER_CLASS_PRESETS[classValue] || OFFICER_CLASS_PRESETS.balanced;
   const eligibility = loanCategoryUtils.normalizeOfficerEligibility(classPreset.eligibility);
   const consumerWeightPercent = classValue === 'custom'
@@ -6755,6 +6886,8 @@ themeToggleBtn?.addEventListener('click', () => {
     // Theme still applies for this session when storage is unavailable.
   }
 });
+
+window.addEventListener?.('lendingfair:tierchange', refreshFairnessEngineUi);
 
 refreshFairnessEngineUi();
 
