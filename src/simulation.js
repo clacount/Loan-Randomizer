@@ -26,6 +26,17 @@
   const loanCategoryUtils = window.LoanCategoryUtils;
   const fairnessEngineService = window.FairnessEngineService;
   const fairnessDisplayService = window.FairnessDisplayService;
+  const entitlements = window.LendingFairEntitlements;
+
+  function canUseFeature(feature) {
+    return !entitlements || entitlements.canUseFeature(feature);
+  }
+
+  function assertFeatureAvailable(feature, message) {
+    if (!canUseFeature(feature)) {
+      throw new Error(message);
+    }
+  }
 
   function getCurrentMonthKey() {
     const date = new Date();
@@ -216,6 +227,11 @@
   }
 
   function openSimulationModal() {
+    if (!canUseFeature(entitlements?.FEATURES?.SIMULATION)) {
+      setMessage('Monthly fairness simulation requires Platinum.', 'warning');
+      return;
+    }
+
     if (!simulationModalEl) {
       return;
     }
@@ -1419,6 +1435,8 @@
   }
 
   async function runFairnessSimulationFromConfig(config) {
+    assertFeatureAvailable(entitlements?.FEATURES?.SIMULATION, 'Monthly fairness simulation requires Platinum.');
+
     const activeTypes = getActiveLoanTypeNames();
     if (!activeTypes.length) {
       throw new Error('At least one active loan type is required for the fairness simulation.');
@@ -1490,6 +1508,11 @@
 
   async function handleSimulationSubmit(event) {
     event.preventDefault();
+
+    if (!canUseFeature(entitlements?.FEATURES?.SIMULATION)) {
+      setSimulationModalMessage('Monthly fairness simulation requires Platinum.', 'warning');
+      return;
+    }
 
     if (!outputDirectoryHandle) {
       setSimulationModalMessage('Choose an output folder before running the fairness simulation.', 'warning');

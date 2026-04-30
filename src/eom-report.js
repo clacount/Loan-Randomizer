@@ -2,6 +2,17 @@
   const fairnessEngineService = window.FairnessEngineService;
   const fairnessDisplayService = window.FairnessDisplayService;
   const loanCategoryUtils = window.LoanCategoryUtils;
+  const entitlements = window.LendingFairEntitlements;
+
+  function canUseFeature(feature) {
+    return !entitlements || entitlements.canUseFeature(feature);
+  }
+
+  function assertFeatureAvailable(feature, message) {
+    if (!canUseFeature(feature)) {
+      throw new Error(message);
+    }
+  }
   function buildEomPdfFileName(date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -364,7 +375,7 @@
       });
     });
 
-    if (report.distributionCharts.length) {
+    if (canUseFeature(entitlements?.FEATURES?.FAIRNESS_AUDIT_REPORT) && report.distributionCharts.length) {
       lines.push({ text: '', size: 11, gapAfter: 8 });
       lines.push({ text: 'Distribution Snapshot', size: 14, gapAfter: 10 });
       lines.push({ text: '__DISTRIBUTION_CHARTS__', size: 11, gapAfter: 0 });
@@ -410,7 +421,7 @@
       });
     }
 
-    if (report.includeFairnessAudit) {
+    if (report.includeFairnessAudit && canUseFeature(entitlements?.FEATURES?.FAIRNESS_AUDIT_REPORT)) {
       lines.push({ text: '', size: 11, gapAfter: 8 });
       lines.push({ text: 'Fairness Audit', size: 14, gapAfter: 10 });
       lines.push({ text: `Loan count variance: ${report.fairnessSummary.maxCountVariancePercent.toFixed(1)}%`, size: 11, gapAfter: 4 });
@@ -441,7 +452,7 @@
       });
     }
 
-    if (report.distributionCharts.length) {
+    if (canUseFeature(entitlements?.FEATURES?.FAIRNESS_AUDIT_REPORT) && report.distributionCharts.length) {
       lines.push({ text: '', size: 11, gapAfter: 8 });
       lines.push({ text: 'Distribution Snapshot', size: 14, gapAfter: 10 });
       lines.push({ text: '__DISTRIBUTION_CHARTS__', size: 11, gapAfter: 0 });
@@ -494,6 +505,8 @@
   }
 
   async function buildEomReport() {
+    assertFeatureAvailable(entitlements?.FEATURES?.EOM_REPORT, 'End-of-month reporting requires Pro or Platinum.');
+
     const generatedAt = new Date();
     const [{ runningTotals }, { loanHistory }] = await Promise.all([
       loadRunningTotals(),
@@ -602,6 +615,10 @@
     const fairnessSummary = buildFairnessSummary(officerStats);
     const reportSettings = getCustomReportTypeSettings(config.reportType);
 
+    if (reportSettings.includeFairnessAudit) {
+      assertFeatureAvailable(entitlements?.FEATURES?.FAIRNESS_AUDIT_REPORT, 'Fairness audit reporting requires Pro or Platinum.');
+    }
+
     return {
       generatedAt,
       startDateLabel: startBound.toLocaleDateString(),
@@ -617,6 +634,11 @@
   }
 
   async function handleEndOfMonthClick() {
+    if (!canUseFeature(entitlements?.FEATURES?.EOM_REPORT)) {
+      setMessage('End-of-month reporting requires Pro or Platinum.', 'warning');
+      return;
+    }
+
     if (!outputDirectoryHandle) {
       setStepMessage('step1', 'Choose an output folder before ending the month.', 'warning');
       return;
@@ -668,6 +690,10 @@
     const previewWindow = window.open('', '_blank');
 
     try {
+      if ((reportTypeInput?.value === 'fairness' || reportTypeInput?.value === 'history') && !canUseFeature(entitlements?.FEATURES?.FAIRNESS_AUDIT_REPORT)) {
+        throw new Error('Fairness audit reporting requires Pro or Platinum.');
+      }
+
       const report = await buildCustomReport({
         startDate: startDateInput?.value || '',
         endDate: endDateInput?.value || '',
@@ -790,6 +816,28 @@
     const customReportForm = document.getElementById('customReportForm');
     const customReportStartDate = document.getElementById('customReportStartDate');
     const customReportEndDate = document.getElementById('customReportEndDate');
+    const customReportType = document.getElementById('customReportType');
+
+    function updateReportingEntitlementUi() {
+      const canUseEom = canUseFeature(entitlements?.FEATURES?.EOM_REPORT);
+      if (reportingEndOfMonthBtn) {
+        reportingEndOfMonthBtn.disabled = !canUseEom;
+        reportingEndOfMonthBtn.title = canUseEom ? '' : 'End-of-month reporting requires Pro or Platinum.';
+      }
+      const canUseFairnessAudit = canUseFeature(entitlements?.FEATURES?.FAIRNESS_AUDIT_REPORT);
+      if (!customReportType) {
+        return;
+      }
+      ['fairness', 'history'].forEach((value) => {
+        const option = customReportType.querySelector(`option[value="${value}"]`);
+        if (option) {
+          option.disabled = !canUseFairnessAudit;
+          option.title = canUseFairnessAudit ? '' : 'Fairness audit reporting requires Pro or Platinum.';
+        }
+      });
+    }
+    updateReportingEntitlementUi();
+    window.addEventListener?.('lendingfair:tierchange', updateReportingEntitlementUi);
 
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
