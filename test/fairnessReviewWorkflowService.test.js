@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 global.window = global;
-require('../src/services/fairnessReviewService.js');
+require('../src/services/fairnessReviewWorkflowService.js');
 
 test('selectBestFairnessAttempt prefers PASS over REVIEW', () => {
   const { selectedAttempt } = global.FairnessReviewService.selectBestFairnessAttempt([
@@ -58,6 +58,16 @@ test('selectBestFairnessAttempt handles missing metrics safely', () => {
   ]);
   assert.equal(response.selectedAttempt.attemptNumber, 1);
   assert.equal(response.reason, 'no_comparable_metrics');
+});
+
+test('selectBestFairnessAttempt skips nullish attempt entries', () => {
+  const response = global.FairnessReviewService.selectBestFairnessAttempt([
+    null,
+    undefined,
+    { attemptNumber: 3, status: 'ADVISORY', metrics: { maxCountVariancePercent: 9 } }
+  ]);
+
+  assert.equal(response.selectedAttempt.attemptNumber, 3);
 });
 
 test('attempt cap constant is set to 5 total attempts', () => {
