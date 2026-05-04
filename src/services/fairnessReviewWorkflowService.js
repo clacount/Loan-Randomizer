@@ -86,7 +86,7 @@
 
   function selectBestFairnessAttempt(attempts = []) {
     const validAttempts = (Array.isArray(attempts) ? attempts : [])
-      .filter((attempt) => !attempt?.result?.error)
+      .filter((attempt) => attempt && !attempt.result?.error)
       .map((attempt, index) => ({
         ...attempt,
         attemptNumber: Number(attempt.attemptNumber) || index + 1,

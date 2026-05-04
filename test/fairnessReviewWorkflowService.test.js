@@ -60,6 +60,16 @@ test('selectBestFairnessAttempt handles missing metrics safely', () => {
   assert.equal(response.reason, 'no_comparable_metrics');
 });
 
+test('selectBestFairnessAttempt skips nullish attempt entries', () => {
+  const response = global.FairnessReviewService.selectBestFairnessAttempt([
+    null,
+    undefined,
+    { attemptNumber: 3, status: 'ADVISORY', metrics: { maxCountVariancePercent: 9 } }
+  ]);
+
+  assert.equal(response.selectedAttempt.attemptNumber, 3);
+});
+
 test('attempt cap constant is set to 5 total attempts', () => {
   assert.equal(global.FairnessReviewService.FAIRNESS_REVIEW_MAX_ATTEMPTS, 5);
 });
