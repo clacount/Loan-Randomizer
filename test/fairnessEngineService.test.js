@@ -170,7 +170,9 @@ test('fairness metrics keep HELOC weighted variance null when optimization metri
   }), true);
   assert.equal(evaluation.roleAwareFlags.helocOnlySupportThresholdsApplied, true);
   assert.equal(evaluation.metrics.helocWeightedVariancePercent, null);
-  assert.equal(evaluation.statusMetricDescriptor?.valuePercent, null);
+  assert.equal(evaluation.roleAwareFlags.helocWeightedMetricUnavailable, true);
+  assert.notEqual(evaluation.statusMetricDescriptor?.key, 'heloc_weighted_variance');
+  assert.match(evaluation.notes.join(' '), /Weighted HELOC optimization metric was unavailable/i);
 });
 
 test('HELOC support pool detection ignores mortgage-only officers excluded from HELOC assignment', () => {

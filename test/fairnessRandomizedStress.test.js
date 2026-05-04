@@ -108,8 +108,20 @@ test('bounded seeded randomized scenarios stay internally consistent for global 
       }
 
       if (evaluation.roleAwareFlags?.helocOnlySupportThresholdsApplied) {
-        assert.equal(evaluation.statusMetricDescriptor?.key, 'heloc_weighted_variance');
-        if (evaluation.overallResult === 'PASS') {
+        const helocDescriptorKeys = new Set([
+          'heloc_weighted_variance',
+          'mortgage_routing_policy',
+          'mortgage_leadership_policy',
+          'mortgage_flex_participation_policy',
+          'flex_lane_count_variance',
+          'flex_lane_dollar_variance'
+        ]);
+        assert.equal(
+          helocDescriptorKeys.has(evaluation.statusMetricDescriptor?.key),
+          true,
+          `Unexpected HELOC descriptor ${evaluation.statusMetricDescriptor?.key} for seed ${seed}`
+        );
+        if (evaluation.statusMetricDescriptor?.key === 'heloc_weighted_variance' && evaluation.overallResult === 'PASS') {
           assert.ok(Number.isFinite(evaluation.statusMetricDescriptor?.valuePercent), `HELOC PASS missing weighted metric seed ${seed}`);
         }
       }

@@ -121,3 +121,5 @@ Pro does not include:
 ## Fairness Review
 
 For REVIEW status runs, LendingFair evaluates additional assignment attempts and selects the best available assignment. If the selected attempt remains REVIEW, manager confirmation is required before final save and report generation. Confirmed REVIEW assignments are captured in fairness audit metadata.
+
+ADVISORY means the assignment passed primary fairness rules but includes a variance condition that should be monitored. ADVISORY results do not require manager confirmation. Small loan volumes, minimal flex participation, HELOC support fallback checks, and single-MLO mortgage patterns are noted in the audit when they affect interpretation.

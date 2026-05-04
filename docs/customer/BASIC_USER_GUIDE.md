@@ -100,3 +100,5 @@ If a license is missing, invalid, or expired, LendingFair blocks new operational
 ## Fairness Review
 
 If an initial run returns REVIEW, LendingFair performs additional assignment attempts and selects the best available assignment. If the selected result still returns REVIEW, manager confirmation is required before running totals/history and reports are saved.
+
+Small loan volumes can create unavoidable one-loan count differences. LendingFair tolerates a one-loan count spread, but it still reviews material dollar imbalance. ADVISORY means the assignment passed primary fairness rules with a condition that should be monitored.

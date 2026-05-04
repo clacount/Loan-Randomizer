@@ -100,6 +100,7 @@
         ))
         .map((officer) => officer.name);
       const hasMortgageLane = mortgageOfficers.length > 0;
+      const activeFlexOfficerCount = normalizedOfficers.filter((officer) => !officer.isOnVacation && this.isFlexOfficer(officer)).length;
 
       const activeMortgageOnlyOfficerCount = normalizedOfficers.filter((officer) => (
         !officer.isOnVacation
@@ -137,14 +138,20 @@
       const helocWeightedVariancePercent = Number.isFinite(parsedHelocWeightedVariancePercent)
         ? parsedHelocWeightedVariancePercent
         : null;
+      const helocWeightedMetricUnavailable = isHelocOnlySupportPool && !Number.isFinite(helocWeightedVariancePercent);
       const helocWeightedTargetPass = Number.isFinite(helocWeightedVariancePercent)
         ? helocWeightedVariancePercent <= this.helocSupportAmountThresholdPercent
-        : false;
+        : true;
       const flexMortgageParticipationCount = Object.values(flexMortgageTypesByOfficer).reduce((sum, typeBreakdown) => {
         const helocCount = Number(typeBreakdown?.HELOC) || Number(typeBreakdown?.heloc) || 0;
         return sum + helocCount;
       }, 0);
       const flexParticipationMeaningful = flexMortgageParticipationCount > 0;
+      const totalFlexAssignedLoans = officerStats
+        .filter((entry) => officerClassMap[entry.officer] === 'F')
+        .reduce((sum, entry) => sum + (Number(entry.totalLoans) || 0), 0);
+      const flexMinimalParticipationToleranceApplied = hasFlexLane
+        && (activeFlexOfficerCount < 2 || totalFlexAssignedLoans < 2);
       const mortgageOfficerLoanCounts = mortgageOfficers.map((officerName) => Number((officerStats.find((entry) => entry.officer === officerName)?.mortgageLoanCount) || 0));
       const flexOfficerLoanCounts = flexOfficers.map((officerName) => Number((officerStats.find((entry) => entry.officer === officerName)?.mortgageLoanCount) || 0));
       const mortgageLoanCountForM = mortgageOfficerLoanCounts.reduce((sum, count) => sum + count, 0);
@@ -176,10 +183,16 @@
           categoryMetrics.mortgageVariance.amountDistributionPass
           || isMortgageDollarInAdvisoryBand
         );
-      const flexLanePass = categoryMetrics.flexVariance.countDistributionPass
+      const flexCountPass = categoryMetrics.flexVariance.countDistributionPass || flexMinimalParticipationToleranceApplied;
+      const flexAmountPass = categoryMetrics.flexVariance.amountDistributionPass
+        || isFlexDollarInAdvisoryBand
+        || (
+          flexMinimalParticipationToleranceApplied
+          && flexAmountVariancePercent <= this.advisoryAmountVarianceUpperPercent
+        );
+      const flexLanePass = flexCountPass
         && (
-          categoryMetrics.flexVariance.amountDistributionPass
-          || isFlexDollarInAdvisoryBand
+          flexAmountPass
         );
       const adjustedConsumerPass = !hasConsumerLane || consumerPass;
       const adjustedMortgageLanePass = !hasMortgageLane || mortgageLanePass;
@@ -191,6 +204,8 @@
       const adjustedFlexLanePass = isHelocOnlySupportPool
         ? helocSupportPass
         : (!hasFlexLane || flexLanePass);
+      const flexMinimalParticipationInformational = flexMinimalParticipationToleranceApplied
+        && (!isHelocOnlySupportPool || adjustedFlexLanePass);
 
       const overallPass = isHelocOnlySupportPool
         ? (adjustedConsumerPass && adjustedMortgageLanePass && adjustedFlexLanePass)
@@ -210,7 +225,49 @@
       );
 
       let statusMetricDescriptor;
-      if (isHelocOnlySupportPool) {
+      if (isHelocOnlySupportPool && hasMortgageLane && !mortgageRoutingPass) {
+        statusMetricDescriptor = {
+          key: 'mortgage_routing_policy',
+          label: 'Mortgage routing share to M officers',
+          valuePercent: mortgageRoutingShareToM * 100,
+          contextLabel: 'Mortgage lane policy checks'
+        };
+      } else if (isHelocOnlySupportPool && hasMortgageLane && !mortgageLeadershipPreserved) {
+        statusMetricDescriptor = {
+          key: 'mortgage_leadership_policy',
+          label: 'Mortgage leadership preservation',
+          valuePercent: mortgageLoanCountShareToM * 100,
+          contextLabel: 'Mortgage lane policy checks'
+        };
+      } else if (isHelocOnlySupportPool && hasMortgageLane && flexParticipationViolation) {
+        statusMetricDescriptor = {
+          key: 'mortgage_flex_participation_policy',
+          label: 'Flex mortgage participation policy',
+          valuePercent: mortgageRoutingShareToM * 100,
+          contextLabel: 'Mortgage lane policy checks'
+        };
+      } else if (isHelocOnlySupportPool && hasFlexLane && !flexParticipationMeaningful) {
+        statusMetricDescriptor = {
+          key: 'mortgage_flex_participation_policy',
+          label: 'Flex HELOC support participation',
+          valuePercent: flexMortgageParticipationCount,
+          contextLabel: 'Mortgage lane policy checks'
+        };
+      } else if (isHelocOnlySupportPool && Number.isFinite(helocWeightedVariancePercent) && !helocWeightedTargetPass) {
+        statusMetricDescriptor = {
+          key: 'heloc_weighted_variance',
+          label: 'Weighted HELOC variance',
+          valuePercent: helocWeightedVariancePercent,
+          contextLabel: 'HELOC-only support thresholds'
+        };
+      } else if (isHelocOnlySupportPool && hasFlexLane && !adjustedFlexLanePass) {
+        statusMetricDescriptor = this.buildLaneVarianceStatusDescriptor({
+          laneKeyPrefix: 'flex_lane',
+          laneLabel: 'Flex lane',
+          laneVariance: categoryMetrics.flexVariance,
+          contextLabel: 'HELOC-only support thresholds'
+        });
+      } else if (isHelocOnlySupportPool && Number.isFinite(helocWeightedVariancePercent)) {
         statusMetricDescriptor = {
           key: 'heloc_weighted_variance',
           label: 'Weighted HELOC variance',
@@ -319,6 +376,27 @@
         ].filter(Boolean),
         notes: [
           'Model note: Officer Lane variance is measured on Consumer-lane and Mortgage-lane officers; Flex lane variance is measured and tracked separately.',
+          ...(categoryMetrics.consumerVariance.oneLoanSpreadToleranceApplied
+            ? ['Consumer lane count variance is within one-loan spread tolerance for this loan volume.']
+            : []),
+          ...(categoryMetrics.mortgageVariance.oneLoanSpreadToleranceApplied
+            ? ['Mortgage lane count variance is within one-loan spread tolerance for this loan volume.']
+            : []),
+          ...(categoryMetrics.flexVariance.oneLoanSpreadToleranceApplied
+            ? ['Flex lane count variance is within one-loan spread tolerance for this loan volume.']
+            : []),
+          ...(flexMinimalParticipationInformational
+            ? ['Flex lane variance is informational because current flex participation is below the minimum volume for strict review.']
+            : []),
+          ...(helocWeightedMetricUnavailable
+            ? ['Weighted HELOC optimization metric was unavailable; standard support-lane variance was used.']
+            : []),
+          ...(singleMlo
+            ? ['Single-MLO note: Mortgage lane variance is expected when only one active mortgage-only officer is available and mortgage routing policy passes.']
+            : []),
+          ...(overallAdvisory
+            ? ['ADVISORY means the assignment passed primary fairness rules but includes a variance condition that should be monitored.']
+            : []),
           ...(isConsumerDollarInAdvisoryBand
             ? [`Advisory note: Consumer dollar variance is above the primary ${this.amountVarianceThresholdPercent.toFixed(1)}% threshold but within the ${this.advisoryAmountVarianceUpperPercent.toFixed(1)}% advisory band; flag for monitoring.`]
             : []),
@@ -342,6 +420,17 @@
         roleAwareFlags: {
           hasSingleMortgageOnlyOfficer: singleMlo,
           mortgageVarianceExpected: singleMlo,
+          consumerOneLoanSpreadToleranceApplied: Boolean(categoryMetrics.consumerVariance.oneLoanSpreadToleranceApplied),
+          mortgageOneLoanSpreadToleranceApplied: Boolean(categoryMetrics.mortgageVariance.oneLoanSpreadToleranceApplied),
+          flexOneLoanSpreadToleranceApplied: Boolean(categoryMetrics.flexVariance.oneLoanSpreadToleranceApplied),
+          oneLoanSpreadToleranceApplied: Boolean(
+            categoryMetrics.consumerVariance.oneLoanSpreadToleranceApplied
+            || categoryMetrics.mortgageVariance.oneLoanSpreadToleranceApplied
+            || categoryMetrics.flexVariance.oneLoanSpreadToleranceApplied
+          ),
+          flexMinimalParticipationToleranceApplied,
+          flexMinimalParticipationInformational,
+          helocWeightedMetricUnavailable,
           consumerDollarAdvisoryBandApplied: isConsumerDollarInAdvisoryBand,
           helocOnlySupportThresholdsApplied: isHelocOnlySupportPool,
           flexParticipationExpected: this.isFlexMortgageParticipationExpected({

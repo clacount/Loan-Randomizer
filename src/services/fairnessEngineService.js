@@ -134,14 +134,28 @@
     return ((highest - lowest) / total) * 100;
   }
 
+  function calculateMaxSpread(entries, valueKey) {
+    if (!entries.length) {
+      return 0;
+    }
+
+    const values = entries.map((entry) => Number(entry[valueKey]) || 0);
+    return Math.max(...values) - Math.min(...values);
+  }
+
   function buildCategoryVariance(entries, countKey, amountKey) {
     const maxCountVariancePercent = calculateMaxVariance(entries, countKey);
     const maxAmountVariancePercent = calculateMaxVariance(entries, amountKey);
+    const maxCountSpread = calculateMaxSpread(entries, countKey);
+    const oneLoanSpreadToleranceApplied = maxCountVariancePercent > COUNT_VARIANCE_THRESHOLD_PERCENT
+      && maxCountSpread <= 1;
 
     return {
+      maxCountSpread,
       maxCountVariancePercent,
       maxAmountVariancePercent,
-      countDistributionPass: maxCountVariancePercent <= COUNT_VARIANCE_THRESHOLD_PERCENT,
+      oneLoanSpreadToleranceApplied,
+      countDistributionPass: maxCountVariancePercent <= COUNT_VARIANCE_THRESHOLD_PERCENT || oneLoanSpreadToleranceApplied,
       amountDistributionPass: maxAmountVariancePercent <= AMOUNT_VARIANCE_THRESHOLD_PERCENT
     };
   }
@@ -244,7 +258,9 @@
           return false;
         }
 
-        const category = globalScope.getLoanCategoryForType ? globalScope.getLoanCategoryForType(typeName) : 'consumer';
+        const category = globalScope.getLoanCategoryForType
+          ? globalScope.getLoanCategoryForType(typeName)
+          : (globalScope.LoanCategoryUtils?.classifyLoanTypeCategory?.(typeName) || 'consumer');
         return !isAllowedFlexMortgageLoanType(typeName, { category }, context);
       })
     ));
@@ -334,6 +350,7 @@
       helocSupportCountThresholdPercent: HELOC_SUPPORT_COUNT_THRESHOLD_PERCENT,
       helocSupportAmountThresholdPercent: HELOC_SUPPORT_AMOUNT_THRESHOLD_PERCENT,
       calculateMaxVariance,
+      calculateMaxSpread,
       normalizeOfficer,
       getOfficerClassCode,
       isFlexOfficer,
@@ -424,8 +441,10 @@
       mortgageVariance: buildCategoryVariance(mortgageEntries, 'mortgageLoanCount', 'mortgageAmount'),
       flexVariance: {
         ...flexVariance,
+        maxCountSpread: flexLaneVariance.maxCountSpread,
         maxCountVariancePercent: flexLaneVariance.maxCountVariancePercent,
         maxAmountVariancePercent: flexLaneVariance.maxAmountVariancePercent,
+        oneLoanSpreadToleranceApplied: flexLaneVariance.oneLoanSpreadToleranceApplied,
         countDistributionPass: flexLaneVariance.countDistributionPass,
         amountDistributionPass: flexLaneVariance.amountDistributionPass
       }
@@ -472,6 +491,7 @@ Object.entries(typeBreakdown).filter(([typeName]) => isMortgageTypeName(typeName
         mortgageVariance: categoryMetrics.mortgageVariance,
         flexVariance: categoryMetrics.flexVariance,
         maxCountVariancePercent: calculateMaxVariance(participatingOfficerStats, 'totalLoans'),
+        maxCountSpread: calculateMaxSpread(participatingOfficerStats, 'totalLoans'),
         maxAmountVariancePercent: calculateMaxVariance(participatingOfficerStats, 'totalAmount')
       }
     };
@@ -484,6 +504,7 @@ Object.entries(typeBreakdown).filter(([typeName]) => isMortgageTypeName(typeName
     setSelectedFairnessEngine,
     getOfficerClassCode,
     hasSingleMortgageOnlyOfficer,
+    calculateMaxSpread,
     isHomogeneousHelocSupportPool,
     evaluateFairness
   };
