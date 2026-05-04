@@ -91,6 +91,23 @@ When an initial assignment returns **REVIEW**, LendingFair runs a capped set of 
 - PASS on initial attempt: saves normally.
 - REVIEW on initial attempt: runs additional assignment attempts.
 - If a PASS is found: that PASS is selected and saved.
+- If an ADVISORY is the best available result: it can be saved without manager confirmation, and the audit notes that monitoring is recommended.
 - If all attempts remain REVIEW: **manager confirmation required** before save/report generation.
 
 This workflow improves review discipline and transparency; it does not hide REVIEW outcomes.
+
+## PASS, ADVISORY, and REVIEW
+
+- **PASS** means the assignment is within primary fairness rules.
+- **ADVISORY** means the assignment passed primary fairness rules but includes a variance condition that should be monitored.
+- **REVIEW** is reserved for assignments that need manager review because of meaningful variance, role/policy conditions, or a material dollar imbalance.
+
+Small loan volumes can create unavoidable one-loan differences, such as two loans split across three officers. LendingFair tolerates a one-loan count spread so those runs do not enter REVIEW solely because of count percentages. Dollar variance is still evaluated normally.
+
+Some REVIEW outcomes may reflect the loan amount mix, officer count, or available eligible officers rather than a correctable assignment issue. For example, one very large loan can create material dollar imbalance even when the app selected the best available result.
+
+For Officer Lane Fairness, low-volume flex participation may be treated as informational instead of forcing REVIEW by itself. Mortgage routing, flex mortgage eligibility, mortgage leadership, and other policy checks can still require REVIEW.
+
+For HELOC-only support scenarios, if the weighted HELOC optimization metric is unavailable, LendingFair falls back to standard support-lane variance checks and records that fallback in the audit notes.
+
+Single-MLO mortgage lane variance is expected when only one active mortgage-only officer is available and routing policy passes. That expected pattern is flagged in the audit, while true policy failures can still require REVIEW.

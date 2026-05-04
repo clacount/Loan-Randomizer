@@ -4474,6 +4474,37 @@ function getPendingReviewReason() {
   return (fairnessEvaluation?.summaryItems || [])[0] || 'The selected assignment remains in REVIEW status.';
 }
 
+function isDollarVarianceReview(fairnessEvaluation = {}) {
+  if (String(fairnessEvaluation?.overallResult || '').toUpperCase() !== 'REVIEW') {
+    return false;
+  }
+
+  const descriptorKey = String(fairnessEvaluation?.statusMetricDescriptor?.key || '').toLowerCase();
+  if (descriptorKey.includes('dollar') || descriptorKey.includes('amount')) {
+    return true;
+  }
+
+  const metrics = fairnessEvaluation?.metrics || {};
+  const amountValues = [
+    metrics.maxAmountVariancePercent,
+    metrics.consumerVariance?.maxAmountVariancePercent,
+    metrics.mortgageVariance?.maxAmountVariancePercent,
+    metrics.flexVariance?.maxAmountVariancePercent
+  ];
+  return amountValues.some((value) => Number(value) > 20);
+}
+
+function buildReviewContextNotes(fairnessEvaluation = {}) {
+  const notes = [];
+  if (isDollarVarianceReview(fairnessEvaluation)) {
+    notes.push('This result may reflect unavoidable imbalance from the loan amount mix, officer count, or available eligible officers.');
+  }
+  if (fairnessEvaluation?.roleAwareFlags?.oneLoanSpreadToleranceApplied) {
+    notes.push('Small loan volumes can create unavoidable one-loan count differences; LendingFair tolerates one-loan count spread while still reviewing material dollar imbalance.');
+  }
+  return notes;
+}
+
 function closeFairnessReviewModal() {
   if (fairnessReviewModalEl) {
     fairnessReviewModalEl.hidden = true;
@@ -4486,6 +4517,7 @@ function openFairnessReviewModal() {
   }
 
   const review = pendingReviewAssignment.result.fairnessReview || {};
+  const contextNotes = buildReviewContextNotes(pendingReviewAssignment.result.fairnessEvaluation);
   fairnessReviewModalBodyEl.innerHTML = `
     <p>This assignment requires review. LendingFair tested additional assignment attempts and selected the best available result, but the fairness status remains REVIEW.</p>
     <p>Review the assignment split on screen. Approve assignment will save history, update running totals, and generate the final report. Deny will discard this pending assignment without saving.</p>
@@ -4496,6 +4528,7 @@ function openFairnessReviewModal() {
       <li>Initial status: <strong>${escapeHtml(String(review.initialStatus || 'REVIEW'))}</strong></li>
       <li>${escapeHtml(getPendingReviewReason())}</li>
     </ul>
+    ${contextNotes.length ? `<p>${escapeHtml(contextNotes.join(' '))}</p>` : ''}
   `;
   fairnessReviewModalEl.hidden = false;
 }
@@ -5442,6 +5475,12 @@ function buildPdfLines(result, officers, loans, generatedAt) {
       lines.push({ text: `Selected status: ${result.fairnessReview.selectedStatus}`, size: 11, gapAfter: 4 });
       lines.push({ text: `Manager confirmation required: ${result.fairnessReview.managerConfirmationRequired ? 'Yes' : 'No'}`, size: 11, gapAfter: 4 });
       lines.push({ text: `Manager confirmed: ${result.fairnessReview.managerConfirmed ? 'Yes' : 'No'}`, size: 11, gapAfter: 4 });
+      if (result.fairnessReview.selectedStatus === 'ADVISORY') {
+        lines.push({ text: 'ADVISORY means the assignment passed primary fairness rules but includes a variance condition that should be monitored.', size: 10, gapAfter: 4 });
+      }
+      buildReviewContextNotes(fairnessEvaluation).forEach((note) => {
+        lines.push({ text: note, size: 10, gapAfter: 4 });
+      });
     }
     fairnessEvaluation.summaryItems.forEach((item) => {
       lines.push({ text: item, size: 11, gapAfter: 4 });
@@ -7639,8 +7678,9 @@ randomizeBtn.addEventListener('click', async () => {
   }
 
   try {
+    const selectedReviewStatus = String(result.fairnessReview?.selectedStatus || '').toUpperCase();
     const reviewPrefix = result.fairnessReview?.attemptsEvaluated > 1
-      ? 'Initial assignment required review. LendingFair tested additional assignment attempts and selected a PASS result.'
+      ? `Initial assignment required review. LendingFair tested additional assignment attempts and selected ${selectedReviewStatus === 'ADVISORY' ? 'an ADVISORY' : 'a PASS'} result.`
       : 'Assignments randomized.';
     await commitAssignmentResult(result, officers, loans, runningTotals, loanHistory, reviewPrefix);
   } catch (error) {

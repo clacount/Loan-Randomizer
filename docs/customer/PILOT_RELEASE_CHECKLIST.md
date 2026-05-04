@@ -84,9 +84,14 @@ Use this checklist before sharing a pilot build with a credit union.
 ## Fairness Review Workflow
 
 - [ ] PASS assignments continue to save normally.
+- [ ] ADVISORY assignments save without manager confirmation and are clearly labeled in the audit/report.
 - [ ] REVIEW assignments trigger additional assignment attempts.
 - [ ] Attempts are capped and do not run indefinitely.
 - [ ] Best available assignment is selected and shown.
 - [ ] If selected status remains REVIEW, manager confirmation is required.
 - [ ] No running totals/history/PDF side effects occur before confirmation for REVIEW status outcomes.
 - [ ] Fairness audit/report metadata shows attempts evaluated, selected attempt, and manager confirmation fields.
+- [ ] One-loan count spread tolerance is documented in the audit when it applies.
+- [ ] Material dollar imbalance remains REVIEW and explains that loan amount mix/officer eligibility may contribute.
+- [ ] Missing HELOC weighted metric uses support-lane fallback instead of failing solely from the missing metric.
+- [ ] Single-MLO expected variance remains protected while policy failures still require REVIEW.

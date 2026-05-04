@@ -4,25 +4,30 @@
       this.countVarianceThresholdPercent = dependencies.countVarianceThresholdPercent;
       this.amountVarianceThresholdPercent = dependencies.amountVarianceThresholdPercent;
       this.calculateMaxVariance = dependencies.calculateMaxVariance;
+      this.calculateMaxSpread = dependencies.calculateMaxSpread;
       this.hasSingleMortgageOnlyOfficer = dependencies.hasSingleMortgageOnlyOfficer;
     }
 
     evaluate(context = {}) {
       const { categoryMetrics } = context;
       const overallCountVariance = this.calculateMaxVariance(context.officerStats || [], 'totalLoans');
+      const overallCountSpread = this.calculateMaxSpread(context.officerStats || [], 'totalLoans');
       const overallAmountVariance = this.calculateMaxVariance(context.officerStats || [], 'totalAmount');
+      const globalOneLoanSpreadToleranceApplied = overallCountVariance > this.countVarianceThresholdPercent
+        && overallCountSpread <= 1;
 
-      const overallPass = overallCountVariance <= this.countVarianceThresholdPercent
+      const countPass = overallCountVariance <= this.countVarianceThresholdPercent || globalOneLoanSpreadToleranceApplied;
+      const overallPass = countPass
         && overallAmountVariance <= this.amountVarianceThresholdPercent;
       const thresholdBreaches = [];
-      if (overallCountVariance > this.countVarianceThresholdPercent) {
+      if (!countPass) {
         thresholdBreaches.push('Overall loan variance');
       }
       if (overallAmountVariance > this.amountVarianceThresholdPercent) {
         thresholdBreaches.push('Overall dollar variance');
       }
 
-      const countFail = overallCountVariance > this.countVarianceThresholdPercent;
+      const countFail = !countPass;
       const dollarFail = overallAmountVariance > this.amountVarianceThresholdPercent;
       let statusMetricDescriptor;
 
@@ -80,6 +85,9 @@
           overallPass
             ? 'Threshold status: PASS (all global variance thresholds are within limits).'
             : `Threshold status: REVIEW (${thresholdBreaches.join(', ')} exceeded threshold${thresholdBreaches.length > 1 ? 's' : ''}).`,
+          ...(globalOneLoanSpreadToleranceApplied
+            ? ['Count variance is within one-loan spread tolerance for this loan volume.']
+            : []),
           'Global Fairness compares distribution across all officers and categories.',
           'Large cross-officer variance should be reviewed when thresholds are exceeded.'
         ],
@@ -91,6 +99,8 @@
         roleAwareFlags: {
           hasSingleMortgageOnlyOfficer: this.hasSingleMortgageOnlyOfficer(context.officers),
           mortgageVarianceExpected: false,
+          globalOneLoanSpreadToleranceApplied,
+          oneLoanSpreadToleranceApplied: globalOneLoanSpreadToleranceApplied,
           flexParticipationExpected: false
         }
       };
