@@ -204,6 +204,8 @@
       const adjustedFlexLanePass = isHelocOnlySupportPool
         ? helocSupportPass
         : (!hasFlexLane || flexLanePass);
+      const flexMinimalParticipationInformational = flexMinimalParticipationToleranceApplied
+        && (!isHelocOnlySupportPool || adjustedFlexLanePass);
 
       const overallPass = isHelocOnlySupportPool
         ? (adjustedConsumerPass && adjustedMortgageLanePass && adjustedFlexLanePass)
@@ -242,6 +244,13 @@
           key: 'mortgage_flex_participation_policy',
           label: 'Flex mortgage participation policy',
           valuePercent: mortgageRoutingShareToM * 100,
+          contextLabel: 'Mortgage lane policy checks'
+        };
+      } else if (isHelocOnlySupportPool && hasFlexLane && !flexParticipationMeaningful) {
+        statusMetricDescriptor = {
+          key: 'mortgage_flex_participation_policy',
+          label: 'Flex HELOC support participation',
+          valuePercent: flexMortgageParticipationCount,
           contextLabel: 'Mortgage lane policy checks'
         };
       } else if (isHelocOnlySupportPool && Number.isFinite(helocWeightedVariancePercent) && !helocWeightedTargetPass) {
@@ -376,7 +385,7 @@
           ...(categoryMetrics.flexVariance.oneLoanSpreadToleranceApplied
             ? ['Flex lane count variance is within one-loan spread tolerance for this loan volume.']
             : []),
-          ...(flexMinimalParticipationToleranceApplied
+          ...(flexMinimalParticipationInformational
             ? ['Flex lane variance is informational because current flex participation is below the minimum volume for strict review.']
             : []),
           ...(helocWeightedMetricUnavailable
@@ -420,6 +429,7 @@
             || categoryMetrics.flexVariance.oneLoanSpreadToleranceApplied
           ),
           flexMinimalParticipationToleranceApplied,
+          flexMinimalParticipationInformational,
           helocWeightedMetricUnavailable,
           consumerDollarAdvisoryBandApplied: isConsumerDollarInAdvisoryBand,
           helocOnlySupportThresholdsApplied: isHelocOnlySupportPool,

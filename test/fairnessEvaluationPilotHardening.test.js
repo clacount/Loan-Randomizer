@@ -197,6 +197,44 @@ test('HELOC-only support still REVIEWs when leadership policy fails', () => {
   assert.equal(evaluation.statusMetricDescriptor?.key, 'mortgage_leadership_policy');
 });
 
+test('HELOC-only no-flex-participation REVIEW reports policy descriptor instead of zero flex variance', () => {
+  const evaluation = evaluateOfficerLane({
+    officers: [
+      { name: 'M1', eligibility: { consumer: false, mortgage: true } },
+      { name: 'F1', eligibility: { consumer: true, mortgage: true } }
+    ],
+    optimizationMetrics: { helocWeightedVariancePercent: 0 },
+    officerStats: [
+      { officer: 'M1', totalLoans: 3, totalAmount: 300, consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 3, mortgageAmount: 300, typeBreakdown: { HELOC: 3 } },
+      { officer: 'F1', totalLoans: 0, totalAmount: 0, consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 0, mortgageAmount: 0, typeBreakdown: {} }
+    ]
+  });
+
+  assert.equal(evaluation.overallResult, 'REVIEW');
+  assert.equal(evaluation.statusMetricDescriptor?.key, 'mortgage_flex_participation_policy');
+  assert.equal(evaluation.statusMetricDescriptor?.label, 'Flex HELOC support participation');
+  assert.equal(evaluation.statusMetricDescriptor?.valuePercent, 0);
+  assert.notEqual(evaluation.statusMetricDescriptor?.key, 'flex_lane_dollar_variance');
+});
+
+test('HELOC-only no-flex-participation REVIEW does not call minimal flex volume informational', () => {
+  const evaluation = evaluateOfficerLane({
+    officers: [
+      { name: 'M1', eligibility: { consumer: false, mortgage: true } },
+      { name: 'F1', eligibility: { consumer: true, mortgage: true } }
+    ],
+    officerStats: [
+      { officer: 'M1', totalLoans: 2, totalAmount: 200, consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 2, mortgageAmount: 200, typeBreakdown: { HELOC: 2 } },
+      { officer: 'F1', totalLoans: 0, totalAmount: 0, consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 0, mortgageAmount: 0, typeBreakdown: {} }
+    ]
+  });
+
+  assert.equal(evaluation.overallResult, 'REVIEW');
+  assert.equal(evaluation.roleAwareFlags.flexMinimalParticipationToleranceApplied, true);
+  assert.equal(evaluation.roleAwareFlags.flexMinimalParticipationInformational, false);
+  assert.doesNotMatch(evaluation.notes.join(' '), /informational because current flex participation is below/i);
+});
+
 test('HELOC-only policy failure descriptor takes priority over passing weighted metric', () => {
   const evaluation = evaluateOfficerLane({
     officers: [
