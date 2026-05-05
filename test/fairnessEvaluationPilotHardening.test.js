@@ -145,6 +145,21 @@ test('minimal flex participation does not cause REVIEW solely from flex lane cou
   assert.match(evaluation.notes.join(' '), /below the minimum volume/i);
 });
 
+test('consumer activity summary appears even when only flex officers are consumer eligible', () => {
+  const evaluation = evaluateOfficerLane({
+    officers: [
+      { name: 'F1', eligibility: { consumer: true, mortgage: true } },
+      { name: 'F2', eligibility: { consumer: true, mortgage: true } }
+    ],
+    officerStats: [
+      { officer: 'F1', totalLoans: 2, totalAmount: 400, consumerLoanCount: 1, consumerAmount: 100, mortgageLoanCount: 1, mortgageAmount: 300, typeBreakdown: { Personal: 1, HELOC: 1 } },
+      { officer: 'F2', totalLoans: 2, totalAmount: 400, consumerLoanCount: 1, consumerAmount: 104, mortgageLoanCount: 1, mortgageAmount: 296, typeBreakdown: { Personal: 1, HELOC: 1 } }
+    ]
+  });
+
+  assert.match(evaluation.summaryItems.join(' | '), /Consumer dollar variance \(consumer-eligible lane\): 2\.0%/);
+});
+
 test('flex mortgage policy violations still REVIEW', () => {
   const evaluation = evaluateOfficerLane({
     officers: [
