@@ -160,6 +160,9 @@
 
   function classifySummaryGroup(text) {
     const normalized = String(text || '').trim().toLowerCase();
+    if (normalized.startsWith('heloc') || normalized.includes('routing') || normalized.includes('advisory band applied')) {
+      return 'policy';
+    }
     if (normalized.startsWith('overall ')) {
       return 'overall';
     }
@@ -171,9 +174,6 @@
     }
     if (normalized.startsWith('flex ')) {
       return 'flex';
-    }
-    if (normalized.startsWith('heloc') || normalized.includes('routing') || normalized.includes('advisory band applied')) {
-      return 'policy';
     }
     return 'overall';
   }

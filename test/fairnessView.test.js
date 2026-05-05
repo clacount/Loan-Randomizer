@@ -48,7 +48,8 @@ test('live fairness summary groups metrics into sections instead of a flat text 
       'Consumer dollar variance (consumer-eligible lane): 4.0%',
       'Mortgage dollar variance (M lane): 11.0%',
       'Flex dollar variance (F lane): 13.5%',
-      'Mortgage lane routing to M officers: 100.0%'
+      'Mortgage lane routing to M officers: 100.0%',
+      'Flex dollar variance advisory band applied: 20.0%–25.0%'
     ]
   });
 
@@ -58,7 +59,10 @@ test('live fairness summary groups metrics into sections instead of a flat text 
   assert.match(html, /Consumer Lane/);
   assert.match(html, /Mortgage Lane/);
   assert.match(html, /Flex Lane/);
+  assert.match(html, /Policy And Thresholds/);
   assert.match(html, /Interpretation/);
   assert.match(html, /Primary status driver/);
+  assert.match(html, /Mortgage lane routing to M officers/);
+  assert.match(html, /Flex dollar variance advisory band applied/);
   assert.doesNotMatch(html, /audit-summary-line/);
 });
