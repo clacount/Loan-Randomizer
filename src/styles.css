@@ -906,10 +906,8 @@ select {
 }
 
 .audit-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex-wrap: wrap;
+  display: grid;
+  gap: 12px;
   padding: 10px 12px;
   border-radius: 10px;
   background: #f6f9fc;
@@ -917,6 +915,69 @@ select {
 }
 
 .audit-summary-line {
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.audit-summary-section {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.audit-summary-section-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.audit-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.audit-summary-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+}
+
+.audit-summary-item-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.audit-summary-item-value {
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.audit-summary-notes {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.audit-summary-note {
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid var(--border);
   color: var(--text);
   line-height: 1.45;
 }
@@ -987,6 +1048,11 @@ select {
 .badge-advisory {
   background: var(--accent-warm-soft);
   color: var(--accent-warm);
+}
+
+.badge-pass {
+  background: rgba(22, 163, 74, 0.12);
+  color: #166534;
 }
 
 .badge-review {
@@ -2045,6 +2111,32 @@ select {
 [data-theme="dark"] .audit-summary {
   background: #172033;
   border-color: var(--border);
+}
+
+[data-theme="dark"] .audit-summary-section {
+  background: rgba(15, 23, 42, 0.5);
+  border-color: rgba(71, 85, 105, 0.55);
+}
+
+[data-theme="dark"] .audit-summary-item,
+[data-theme="dark"] .audit-summary-note {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .badge-pass {
+  background: #123524;
+  color: #bbf7d0;
+}
+
+[data-theme="dark"] .badge-advisory {
+  background: #39280f;
+  color: #fde68a;
+}
+
+[data-theme="dark"] .badge-review {
+  background: #3b1717;
+  color: #ffd1d1;
 }
 
 [data-theme="dark"] .audit-table tr.winner td {

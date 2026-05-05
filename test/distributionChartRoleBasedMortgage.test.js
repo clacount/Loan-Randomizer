@@ -182,6 +182,14 @@ test('role-based mortgage dollar donut includes flex mortgage participation and 
   );
 
   const distributionCharts = context.__elementsById.distributionCharts;
+  const consumerAfterCard = distributionCharts.children[3];
+  const consumerNoteTexts = consumerAfterCard.children
+    .filter((child) => child.tagName === 'p')
+    .map((child) => child.textContent);
+  assert.ok(consumerNoteTexts.some((text) => text.includes('Variance/status view: Consumer lane dollar variance')));
+  assert.ok(consumerNoteTexts.some((text) => text.includes('Overall status driver: Flex lane dollar variance 11.7%')));
+  assert.ok(consumerNoteTexts.some((text) => text.includes('Flex officers can appear in consumer composition')));
+
   const mortgageAfterCard = distributionCharts.children[5];
   const noteTexts = mortgageAfterCard.children
     .filter((child) => child.tagName === 'p')
@@ -211,8 +219,10 @@ test('mortgage flex participation descriptor is treated as mortgage-lane driven 
     fairnessEvaluation: evaluation
   });
 
-  assert.match(parityNotes.statusMetricLine, /Flex mortgage participation policy/);
-  assert.match(parityNotes.statusMetricLine, /Mortgage lane policy checks/);
+  assert.match(parityNotes.statusMetricLine, /Mortgage lane dollar variance/);
+  assert.match(parityNotes.statusMetricLine, /Mortgage lane thresholds/);
   assert.match(parityNotes.alignmentLine, /mortgage policy check/i);
+  assert.match(parityNotes.statusDriverLine, /Flex mortgage participation policy/);
+  assert.match(parityNotes.statusDriverLine, /Mortgage lane policy checks/);
   assert.doesNotMatch(parityNotes.alignmentLine, /driven by flex-lane variance/i);
 });

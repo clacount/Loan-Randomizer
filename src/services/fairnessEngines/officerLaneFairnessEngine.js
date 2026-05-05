@@ -80,6 +80,7 @@
       const hasConsumerLane = normalizedOfficers.some((officer) => this.getOfficerClassCode(officer) === 'C');
       const hasFlexLane = normalizedOfficers.some((officer) => this.getOfficerClassCode(officer) === 'F');
       const totalConsumerLoans = officerStats.reduce((sum, entry) => sum + (Number(entry.consumerLoanCount) || 0), 0);
+      const hasConsumerActivity = totalConsumerLoans > 0 || categoryMetrics.consumerVariance.maxAmountVariancePercent > 0;
       const allMortgageTypes = officerStats
         .flatMap((entry) => Object.entries(entry.typeBreakdown || {}))
         .filter(([, count]) => (Number(count) || 0) > 0)
@@ -342,7 +343,7 @@
       return {
         overallResult: overallAdvisory ? 'ADVISORY' : (overallPass ? 'PASS' : 'REVIEW'),
         summaryItems: [
-          ...(hasConsumerLane ? [
+          ...(hasConsumerLane || hasConsumerActivity ? [
             `Consumer loan variance (consumer-eligible lane): ${categoryMetrics.consumerVariance.maxCountVariancePercent.toFixed(1)}%`,
             `Consumer dollar variance (consumer-eligible lane): ${categoryMetrics.consumerVariance.maxAmountVariancePercent.toFixed(1)}%`,
             this.buildLaneBreakdownText(consumerLaneEntries, 'consumerLoanCount', 'Consumer counts')

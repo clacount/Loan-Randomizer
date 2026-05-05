@@ -2948,7 +2948,27 @@ function getOfficerLaneChartParityNotes({ fairnessEvaluation, chartLane }) {
     ? `${Number(descriptor.valuePercent).toFixed(1)}%`
     : 'n/a';
   const statusContextSuffix = descriptor.contextLabel ? ` (${descriptor.contextLabel})` : '';
-  const statusMetricLine = `Variance/status view: ${descriptor.label} ${statusValueText}${statusContextSuffix}`;
+  const metrics = fairnessEvaluation?.metrics || {};
+  const laneDescriptor = chartLane === 'consumer'
+    ? {
+        key: 'consumer_lane_dollar_variance',
+        label: 'Consumer lane dollar variance',
+        valuePercent: metrics.consumerVariance?.maxAmountVariancePercent,
+        contextLabel: 'Consumer lane thresholds'
+      }
+    : chartLane === 'mortgage'
+      ? {
+          key: 'mortgage_lane_dollar_variance',
+          label: 'Mortgage lane dollar variance',
+          valuePercent: metrics.mortgageVariance?.maxAmountVariancePercent,
+          contextLabel: 'Mortgage lane thresholds'
+        }
+      : descriptor;
+  const laneValueText = Number.isFinite(Number(laneDescriptor.valuePercent))
+    ? `${Number(laneDescriptor.valuePercent).toFixed(1)}%`
+    : 'n/a';
+  const laneContextSuffix = laneDescriptor.contextLabel ? ` (${laneDescriptor.contextLabel})` : '';
+  const statusMetricLine = `Variance/status view: ${laneDescriptor.label} ${laneValueText}${laneContextSuffix}`;
   const laneLabel = chartLane === 'consumer' ? 'consumer-lane composition' : chartLane === 'mortgage' ? 'mortgage-lane composition' : 'composition';
   const descriptorLane = descriptor.key?.startsWith('consumer')
     ? 'consumer'
@@ -2964,12 +2984,24 @@ function getOfficerLaneChartParityNotes({ fairnessEvaluation, chartLane }) {
   const alignmentLine = descriptorLane && descriptorLane === chartLane
     ? `Composition view: This donut shows ${laneLabel}; status is using ${isMortgagePolicyDescriptor ? 'the same mortgage policy check' : 'the same lane metric'}.`
     : descriptorLane
-      ? `Composition view: This donut shows ${laneLabel}; PASS/REVIEW is currently driven by ${descriptorLane}-lane variance.`
+      ? `Composition view: This donut shows ${laneLabel}; overall status is currently driven by ${descriptorLane}-lane variance.`
       : `Composition view: This donut shows ${laneLabel}; PASS/REVIEW is currently driven by a specialized status basis.`;
+  const statusDriverLine = descriptor.key !== laneDescriptor.key
+    ? `Overall status driver: ${descriptor.label} ${statusValueText}${statusContextSuffix}.`
+    : '';
+  const flexContextLine = chartLane === 'consumer' && (
+    metrics.flexVariance?.totalConsumerAmount > 0
+    || metrics.flexVariance?.totalMortgageAmount > 0
+    || descriptorLane === 'flex'
+  )
+    ? 'Flex context: Flex officers can appear in consumer composition while their mortgage support is evaluated separately in the flex/mortgage support context.'
+    : '';
 
   return {
     statusMetricLine,
-    alignmentLine
+    alignmentLine,
+    statusDriverLine,
+    flexContextLine
   };
 }
 
@@ -3102,6 +3134,12 @@ function renderDistributionCharts(result, officers, runningTotals) {
       });
       chartNotes.push(parityNotes.statusMetricLine);
       chartNotes.push(parityNotes.alignmentLine);
+      if (parityNotes.statusDriverLine) {
+        chartNotes.push(parityNotes.statusDriverLine);
+      }
+      if (parityNotes.flexContextLine) {
+        chartNotes.push(parityNotes.flexContextLine);
+      }
     }
 
     chartNotes.forEach((noteText) => {
