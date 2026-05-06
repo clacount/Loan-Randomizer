@@ -6167,8 +6167,8 @@ function buildPdfLines(result, officers, loans, generatedAt) {
       lines.push({ text: `Selected attempt: ${result.fairnessReview.selectedAttempt}`, size: 11, gapAfter: 4 });
       lines.push({ text: `Initial status: ${result.fairnessReview.initialStatus}`, size: 11, gapAfter: 4 });
       lines.push({ text: `Selected status: ${result.fairnessReview.selectedStatus}`, size: 11, gapAfter: 4 });
-      lines.push({ text: `Manager confirmation required: ${result.fairnessReview.managerConfirmationRequired ? 'Yes' : 'No'}`, size: 11, gapAfter: 4 });
-      lines.push({ text: `Manager confirmed: ${result.fairnessReview.managerConfirmed ? 'Yes' : 'No'}`, size: 11, gapAfter: 4 });
+      lines.push({ text: `Approver confirmation required: ${result.fairnessReview.managerConfirmationRequired ? 'Yes' : 'No'}`, size: 11, gapAfter: 4 });
+      lines.push({ text: `Approver confirmed: ${result.fairnessReview.managerConfirmed ? 'Yes' : 'No'}`, size: 11, gapAfter: 4 });
       if (result.fairnessReview.selectedStatus === 'ADVISORY') {
         lines.push({ text: 'ADVISORY means the assignment passed primary fairness rules but includes a variance condition that should be monitored.', size: 10, gapAfter: 4 });
       }

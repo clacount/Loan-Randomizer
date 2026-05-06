@@ -113,7 +113,7 @@ Pro includes **Linked Member Loan Groups** for member relationship continuity.
 - The linked group is treated as one assignment unit when the officer is selected.
 - Fairness still evaluates the final result loan by loan, so linked groups can increase variance and may contribute to REVIEW.
 - Mixed consumer/mortgage linked groups require one officer who is eligible for every loan in the group.
-- REVIEW assignments that include linked groups require typed manager approval before final save.
+- REVIEW assignments that include linked groups require typed user approval before final save.
 
 Use this feature as an operational exception for member service continuity, not as a way to override normal fairness expectations.
 
@@ -132,6 +132,6 @@ Pro does not include:
 
 ## Fairness Review
 
-For REVIEW status runs, LendingFair evaluates additional assignment attempts and selects the best available assignment. If the selected attempt remains REVIEW, manager confirmation is required before final save and report generation. Confirmed REVIEW assignments are captured in fairness audit metadata.
+For REVIEW status runs, LendingFair evaluates additional assignment attempts and selects the best available assignment. If the selected attempt remains REVIEW, approver confirmation is required before final save and report generation. Confirmed REVIEW assignments are captured in fairness audit metadata.
 
-ADVISORY means the assignment passed primary fairness rules but includes a variance condition that should be monitored. ADVISORY results do not require manager confirmation. Small loan volumes, minimal flex participation, HELOC support fallback checks, and single-MLO mortgage patterns are noted in the audit when they affect interpretation.
+ADVISORY means the assignment passed primary fairness rules but includes a variance condition that should be monitored. ADVISORY results do not require approver confirmation. Small loan volumes, minimal flex participation, HELOC support fallback checks, and single-MLO mortgage patterns are noted in the audit when they affect interpretation.

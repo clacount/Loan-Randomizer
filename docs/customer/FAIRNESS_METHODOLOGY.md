@@ -91,8 +91,8 @@ When an initial assignment returns **REVIEW**, LendingFair runs a capped set of 
 - PASS on initial attempt: saves normally.
 - REVIEW on initial attempt: runs additional assignment attempts.
 - If a PASS is found: that PASS is selected and saved.
-- If an ADVISORY is the best available result: it can be saved without manager confirmation, and the audit notes that monitoring is recommended.
-- If all attempts remain REVIEW: **manager confirmation required** before save/report generation.
+- If an ADVISORY is the best available result: it can be saved without approver confirmation, and the audit notes that monitoring is recommended.
+- If all attempts remain REVIEW: **approver confirmation required** before save/report generation.
 
 This workflow improves review discipline and transparency; it does not hide REVIEW outcomes.
 
@@ -100,7 +100,7 @@ This workflow improves review discipline and transparency; it does not hide REVI
 
 - **PASS** means the assignment is within primary fairness rules.
 - **ADVISORY** means the assignment passed primary fairness rules but includes a variance condition that should be monitored.
-- **REVIEW** is reserved for assignments that need manager review because of meaningful variance, role/policy conditions, or a material dollar imbalance.
+- **REVIEW** is reserved for assignments that need approver review because of meaningful variance, role/policy conditions, or a material dollar imbalance.
 
 Small loan volumes can create unavoidable one-loan differences, such as two loans split across three officers. LendingFair tolerates a one-loan count spread so those runs do not enter REVIEW solely because of count percentages. Dollar variance is still evaluated normally.
 
@@ -120,6 +120,6 @@ Some credit unions may intentionally link multiple applications for the same mem
 - The group is assigned as one unit to one eligible officer.
 - Fairness still evaluates the final assignment loan by loan and dollar by dollar.
 - Linked groups can increase variance and may legitimately trigger REVIEW.
-- If a REVIEW assignment includes linked groups, manager typed approval is required before the assignment is saved.
+- If a REVIEW assignment includes linked groups, typed user approval is required before the assignment is saved.
 
 Reports and support diagnostics record linked group labels, reasons, assigned officers, and approval metadata when applicable.
