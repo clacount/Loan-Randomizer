@@ -2199,15 +2199,33 @@ function renderLinkedLoanGroupModalRows() {
   if (!linkedLoanGroupLoanListEl) {
     return;
   }
-  const loans = getLoanValues();
+  const loanRows = [...loanList.querySelectorAll('.loan-row')];
   linkedLoanGroupLoanListEl.innerHTML = '';
-  loans.forEach((loan, index) => {
+  loanRows.forEach((loanRow, rowIndex) => {
+    const nameInput = loanRow.querySelector('input');
+    const typeSelect = loanRow.querySelector('select');
+    const amountInput = loanRow.querySelector('.loan-amount-input');
+    const loanName = String(nameInput?.value || '').trim();
+
+    if (!loanName) {
+      return;
+    }
+
+    const loanType = typeSelect?.value || '';
+    const amountValue = String(amountInput?.value || '').trim();
+    const amountRequested = isAmountOptionalForType(loanType)
+      ? 0
+      : amountValue === ''
+        ? null
+        : Number(amountValue);
+    const linkedGroupMetadata = getLinkedGroupMetadataFromRow(loanRow);
+
     const row = document.createElement('label');
     row.className = 'linked-loan-group-loan-option';
     row.innerHTML = `
-      <input type="checkbox" data-loan-index="${index}" />
-      <span><strong>${escapeHtml(loan.name)}</strong> <span class="type-badge">${escapeHtml(loan.type)}</span> ${escapeHtml(formatCurrency(loan.amountRequested || 0))}</span>
-      <span class="hint">${escapeHtml(loan.linkedGroupLabel || 'Not linked')}</span>
+      <input type="checkbox" data-loan-index="${rowIndex}" />
+      <span><strong>${escapeHtml(loanName)}</strong> <span class="type-badge">${escapeHtml(loanType)}</span> ${escapeHtml(formatCurrency(amountRequested || 0))}</span>
+      <span class="hint">${escapeHtml(linkedGroupMetadata.linkedGroupLabel || 'Not linked')}</span>
     `;
     linkedLoanGroupLoanListEl.appendChild(row);
   });
