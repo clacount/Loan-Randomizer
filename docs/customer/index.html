@@ -119,6 +119,17 @@
       <a href="#support-export">Support Export</a>
       <a href="#pilot-release-checklist">Pilot Release Checklist</a>
     </nav>
+    <h3>Included Source Documents</h3>
+    <ul>
+      <li><a href="./GETTING_STARTED.md">GETTING_STARTED.md</a></li>
+      <li><a href="./BASIC_USER_GUIDE.md">BASIC_USER_GUIDE.md</a></li>
+      <li><a href="./PRO_USER_GUIDE.md">PRO_USER_GUIDE.md</a></li>
+      <li><a href="./FAIRNESS_METHODOLOGY.md">FAIRNESS_METHODOLOGY.md</a></li>
+      <li><a href="./IMPLEMENTATION_CHECKLIST.md">IMPLEMENTATION_CHECKLIST.md</a></li>
+      <li><a href="./KNOWN_LIMITATIONS.md">KNOWN_LIMITATIONS.md</a></li>
+      <li><a href="./SUPPORT_EXPORT.md">SUPPORT_EXPORT.md</a></li>
+      <li><a href="./PILOT_RELEASE_CHECKLIST.md">PILOT_RELEASE_CHECKLIST.md</a></li>
+    </ul>
   </header>
 
   <section id="getting-started">
@@ -145,11 +156,21 @@
     <pre><code>lendingfair-license.json</code></pre>
     <p>This file stores only the license key and lives in the root of the selected working folder, not inside a monthly folder. If another authorized user opens LendingFair and selects the same working folder, the app reads that same license file.</p>
     <p>If a license is missing, invalid, or expired, LendingFair blocks new operational actions such as running assignments, importing loans, editing officers, editing loan types, simulations, and new report generation. Existing files are not deleted, and support export remains available.</p>
-    <h3>Working Folder and Monthly Files</h3>
-    <p>Select a working folder approved by your institution. LendingFair creates or uses a monthly subfolder named in <code>YYYY-MM</code> format, such as <code>2026-05</code>.</p>
-    <p>The active monthly folder contains running totals CSV, loan history CSV, generated PDFs, and EOM/custom reports when available.</p>
-    <h3>Outputs</h3>
-    <p>Reports include app version, active tier, generated timestamp, fairness engine, assignments by loan/officer, and fairness audit details when available for the tier.</p>
+    <h3>Working Folder Selection</h3>
+    <p>When you open LendingFair, select a working folder. This folder is where LendingFair stores monthly state files and generated reports.</p>
+    <p>Use a folder that your institution is comfortable using for operational records, such as a local secured folder or a OneDrive-synced folder approved by your IT team.</p>
+    <h3>Monthly Folder Behavior</h3>
+    <p>LendingFair creates or uses a monthly subfolder named in <code>YYYY-MM</code> format, such as <code>2026-05</code>.</p>
+    <p>The active monthly folder contains files such as:</p>
+    <ul>
+      <li>running totals CSV</li>
+      <li>loan history CSV</li>
+      <li>generated assignment PDFs</li>
+      <li>generated EOM or custom reports when available</li>
+    </ul>
+    <h3>PDF and CSV Outputs</h3>
+    <p>Each assignment run can generate a PDF report showing app version, active tier, generated timestamp, fairness engine used, assignments by loan, assignments by officer, fairness audit details when included by the tier, and running totals.</p>
+    <p>CSV files are used for local persistence, duplicate prevention, monthly history, and running totals.</p>
     <h3>No LOS/LMS Integration in Basic or Pro</h3>
     <p>Basic and Pro do not connect directly to a Loan Origination System or Loan Management System. Pro supports file-based loan import only, such as a user-selected CSV export with mapping, preview, validation, and confirm. Direct polling, API/webhook ingestion, automated live runs, and writeback are part of the Platinum roadmap.</p>
     <h3>Platinum Roadmap</h3>
@@ -167,7 +188,16 @@
 
   <section id="basic-user-guide">
     <h2>Basic User Guide</h2>
+    <h3>Basic Scope</h3>
     <p>LendingFair Basic supports consumer-loan assignment only. It uses the Global fairness engine and one shared officer pool.</p>
+    <p>Basic does not support mortgage loans, HELOC routing, Officer Lane Fairness, mortgage officer roles, flex officer roles, loan file import, simulation, EOM reporting, direct SharePoint upload, or LOS/LMS integration.</p>
+    <h3>Supported Consumer Loan Types</h3>
+    <ul>
+      <li>Auto</li>
+      <li>Personal</li>
+      <li>Credit Card</li>
+      <li>Collateralized</li>
+    </ul>
     <h3>Selecting a Working Folder</h3>
     <p>A working folder is required to save the assignment history. The working folder is selected at the beginning of the first session and can be changed as needed.</p>
     <ul>
@@ -183,13 +213,6 @@
       <li>The license key can be manually entered or imported from a file.</li>
       <li>The license key is case-sensitive.</li>
     </ul>
-    <h3>Supported Consumer Loan Types</h3>
-    <ul>
-      <li>Auto</li>
-      <li>Personal</li>
-      <li>Credit Card</li>
-      <li>Collateralized</li>
-    </ul>
     <h3>Adding Officers</h3>
     <ol>
       <li>Open LendingFair in Edge or Chrome.</li>
@@ -197,6 +220,7 @@
       <li>Add each loan officer in the assignment pool.</li>
       <li>Confirm officer names are spelled consistently.</li>
     </ol>
+    <p>Officer names must be unique so running totals and history can be tracked correctly.</p>
     <h3>Entering Loans</h3>
     <p>For each loan, enter the loan application number or ID, loan type, and amount requested when applicable. Credit Card loans may be tracked by count and type rather than goal-dollar amount if configured that way.</p>
     <h3>Importing Loans</h3>
@@ -218,35 +242,80 @@
     <p>LendingFair tracks loan history in the selected monthly folder. Use consistent loan IDs so duplicate prevention works as intended.</p>
     <h3>What Basic Does Not Include</h3>
     <p>Basic does not include mortgage loan support, HELOC-specific routing, Officer Lane Fairness, file-based loan import, simulation, EOM reporting, custom branding, direct SharePoint upload, LOS/LMS integration, backend database, or centralized authentication.</p>
+    <h3>Fairness Review</h3>
+    <p>If an initial run returns <strong>REVIEW</strong>, LendingFair performs additional assignment attempts and selects the best available assignment. If the selected result still returns <strong>REVIEW</strong>, approver confirmation is required before running totals, history, and reports are saved.</p>
+    <p>Small loan volumes can create unavoidable one-loan count differences. LendingFair tolerates a one-loan count spread, but it still reviews material dollar imbalance. <strong>ADVISORY</strong> means the assignment passed primary fairness rules with a condition that should be monitored.</p>
   </section>
 
   <section id="pro-user-guide">
     <h2>Pro User Guide</h2>
-    <p>LendingFair Pro includes the Basic consumer-loan workflow and adds mortgage loan categories, officer roles, Officer Lane Fairness, file-based loan import, fairness audit reporting, EOM reporting when available, and fairness simulation up to 60 business days.</p>
+    <h3>Pro Scope</h3>
+    <p>LendingFair Pro includes the Basic consumer-loan workflow and adds support for mortgage loan categories, officer roles, Officer Lane Fairness, file-based loan import, fairness audit reporting, EOM reporting when available, and fairness simulation up to 60 business days.</p>
     <h3>Loan Categories</h3>
     <ul>
       <li>Consumer loans</li>
       <li>Mortgage loans</li>
     </ul>
+    <p>Consumer loan examples include Auto, Personal, Credit Card, and Collateralized. Mortgage examples may include First Mortgage, Home Refinance, HELOC, or other configured mortgage-related loan types.</p>
     <h3>Officer Roles</h3>
     <ul>
       <li><strong>Consumer:</strong> eligible for consumer loans.</li>
       <li><strong>Mortgage:</strong> eligible for mortgage loans.</li>
       <li><strong>Flex:</strong> eligible for both consumer and mortgage loans.</li>
     </ul>
+    <h3>Configuring Officers</h3>
+    <ol>
+      <li>Enter the officer name.</li>
+      <li>Choose the appropriate role or class.</li>
+      <li>Configure mortgage or flex behavior if applicable.</li>
+      <li>Confirm vacation or inactive status if supported for the current workflow.</li>
+      <li>Save the officer.</li>
+    </ol>
+    <p>Flex officers can support both lanes and may use configured focus weights depending on the selected officer setup.</p>
+    <h3>Configuring Loan Types</h3>
+    <p>Loan types should be assigned to the correct category: Consumer or Mortgage. Correct categorization matters because Officer Lane Fairness uses category and officer eligibility to decide who can receive each loan.</p>
+    <p>The Recommended Fairness Model also uses these categories. If loans are imported before officers are configured, the recommendation card can provide preliminary loan-mix guidance, but the final recommendation requires active officer roles to be loaded or configured.</p>
     <h3>Officer Lane Fairness</h3>
     <p>Officer Lane Fairness assigns each loan only to an eligible officer and evaluates fairness within the applicable role/lane context. This avoids comparing officers unfairly against work they are not eligible to receive.</p>
+    <h3>Running Assignments</h3>
+    <ol>
+      <li>Select the working folder.</li>
+      <li>Confirm officers and roles.</li>
+      <li>Confirm loan types and categories.</li>
+      <li>Enter the current loans manually or import a loan file.</li>
+      <li>Choose the appropriate fairness model.</li>
+      <li>Run the assignment.</li>
+      <li>Review the generated PDF and fairness audit.</li>
+    </ol>
     <h3>Simulation</h3>
     <p>Pro includes fairness simulation up to 60 business days. Simulations are intended for validation, training, and policy review, and do not modify production assignment history.</p>
     <h3>File-Based Loan Import</h3>
     <p>Pro supports importing loan files such as CSV exports. Users should review detected headers, map required columns, preview the import, and confirm only after validating the results. This is not live LOS/LMS integration.</p>
+    <p>Imported loans still use the configured loan types and categories. They remain subject to duplicate loan prevention, assignment validation, and the selected fairness engine before any assignments are generated.</p>
+    <h3>PDF and Fairness Audit Output</h3>
+    <p>Pro reports may include app version and active tier, generated timestamp, fairness engine used, assignments by loan, assignments by officer, lane-aware fairness audit details, running totals, and distribution snapshots when available.</p>
+    <h3>End-of-Month Reporting</h3>
+    <p>If EOM reporting is enabled for the package, Pro can generate month-end reporting and archive current monthly tracking. Confirm the retention process with management and IT before using EOM closeout in production.</p>
+    <h3>Linked Member Loan Groups</h3>
+    <p>Pro includes linked member loan groups for member relationship continuity. Link two or more related loans so they are assigned to the same officer.</p>
+    <ul>
+      <li>The linked group is treated as one assignment unit when the officer is selected.</li>
+      <li>Fairness still evaluates the final result loan by loan, so linked groups can increase variance and may contribute to <strong>REVIEW</strong>.</li>
+      <li>Mixed consumer and mortgage linked groups require one officer who is eligible for every loan in the group.</li>
+      <li><strong>REVIEW</strong> assignments that include linked groups require typed user approval before final save.</li>
+    </ul>
     <h3>What Pro Does Not Include</h3>
     <p>Pro does not include automated LOS/LMS integration, scheduled or live loan data sync, live API/webhook assignment runs, backend database persistence, centralized authentication, direct SharePoint upload unless separately integrated, unlimited simulation, or Platinum custom integration workflows.</p>
+    <h3>Fairness Review</h3>
+    <p>For <strong>REVIEW</strong> status runs, LendingFair evaluates additional assignment attempts and selects the best available assignment. If the selected attempt remains <strong>REVIEW</strong>, approver confirmation is required before final save and report generation. Confirmed <strong>REVIEW</strong> assignments are captured in fairness audit metadata.</p>
+    <p><strong>ADVISORY</strong> means the assignment passed primary fairness rules but includes a variance condition that should be monitored. Small loan volumes, minimal flex participation, HELOC support fallback checks, and single-MLO mortgage patterns are noted in the audit when they affect interpretation.</p>
   </section>
 
   <section id="fairness-methodology">
     <h2>Fairness Methodology</h2>
+    <h3>Plain-English Summary</h3>
     <p>LendingFair assigns each loan to one eligible officer. The assignment is based on configured eligibility rules and fairness balancing across current loans and prior running totals.</p>
+    <p>The goal is to make assignment decisions more consistent, transparent, and reviewable.</p>
     <h3>What the App Balances</h3>
     <ul>
       <li>loan type mix</li>
@@ -257,11 +326,47 @@
       <li>active/vacation status when supported</li>
     </ul>
     <p>Credit Card loans may be count-based or amount-excluded depending on configured loan type behavior.</p>
+    <h3>Credit Card / Count-Based Loans</h3>
+    <p>Credit Card loans may be count-based or amount-excluded depending on the configured loan type behavior. In that setup, Credit Card loans still count as assigned opportunities, but their dollar amount may not contribute to goal-dollar balancing.</p>
+    <h3>Running Totals</h3>
     <p>Running totals are stored in the selected working folder and active monthly subfolder, so LendingFair does not treat every run as a blank slate.</p>
+    <p>Running totals can include officer loan counts, total assigned goal dollars, loan type counts, and active sessions.</p>
+    <h3>Global Fairness</h3>
+    <p>Global Fairness compares active officers as one shared assignment pool. This is the Basic model and fits consumer-loan workflows where all included officers can receive the same kinds of loans.</p>
     <h3>Global vs. Officer Lane Fairness</h3>
     <p>Global Fairness compares active officers as one shared assignment pool. Officer Lane Fairness accounts for Consumer/Mortgage role eligibility and supports Consumer, Mortgage, and Flex officer roles.</p>
+    <h3>Recommended Fairness Model</h3>
+    <p>The Recommended Fairness Model considers both the active officer setup and the current entered or imported loan mix. If mortgage-category loans are present and the active officer pool has Consumer, Mortgage, or Flex lane separation, the app may recommend Officer Lane Fairness.</p>
+    <p>If mortgage loans are present but all active officers share the same coverage pattern, Global Fairness may still be appropriate because the officers are being compared against the same eligible work.</p>
+    <h3>Flex Officers</h3>
+    <p>Flex officers can support both consumer and mortgage lanes. Depending on configured policy, flex officers may have focus weights or routing behavior that reflects whether they primarily support consumer or mortgage work.</p>
+    <h3>Vacation / Inactive Handling</h3>
+    <p>When vacation or inactive handling is used, LendingFair can exclude unavailable officers from current assignment while preserving their prior totals. This helps avoid forcing catch-up behavior when an officer returns.</p>
+    <h3>Policy Role</h3>
+    <p>The credit union should review and approve its own assignment policy, including which loans are in scope, which officers are eligible, how mortgage and HELOC loans should be handled, how vacations or inactive officers should be treated, and how reports should be reviewed and retained.</p>
     <h3>Disclaimer</h3>
     <p>The credit union should review and approve its own assignment policy. LendingFair provides an auditable assignment recommendation based on configured rules and available data.</p>
+    <h3>Fairness Review Workflow</h3>
+    <p>When an initial assignment returns <strong>REVIEW</strong>, LendingFair runs a capped set of additional assignment attempts using the same inputs and selects the best available assignment.</p>
+    <ul>
+      <li><strong>PASS</strong> on initial attempt saves normally.</li>
+      <li><strong>REVIEW</strong> on initial attempt runs additional assignment attempts.</li>
+      <li>If a <strong>PASS</strong> is found, that <strong>PASS</strong> is selected and saved.</li>
+      <li>If an <strong>ADVISORY</strong> is the best available result, it can be saved without approver confirmation.</li>
+      <li>If all attempts remain <strong>REVIEW</strong>, approver confirmation is required before save and report generation.</li>
+    </ul>
+    <h3>PASS, ADVISORY, and REVIEW</h3>
+    <p><strong>PASS</strong> means the assignment is within primary fairness rules. <strong>ADVISORY</strong> means the assignment passed primary fairness rules but includes a variance condition that should be monitored. <strong>REVIEW</strong> is reserved for assignments that need approver review because of meaningful variance, role or policy conditions, or material dollar imbalance.</p>
+    <p>Small loan volumes can create unavoidable one-loan differences. LendingFair tolerates a one-loan count spread so those runs do not enter <strong>REVIEW</strong> solely because of count percentages, but dollar variance is still evaluated normally.</p>
+    <h3>Linked Member Loan Groups</h3>
+    <p>Some credit unions may intentionally link multiple applications for the same member so one loan officer handles the full relationship.</p>
+    <ul>
+      <li>LendingFair treats a linked member loan group as a documented fairness exception.</li>
+      <li>The group is assigned as one unit to one eligible officer.</li>
+      <li>Fairness still evaluates the final assignment loan by loan and dollar by dollar.</li>
+      <li>Linked groups can increase variance and may legitimately trigger <strong>REVIEW</strong>.</li>
+      <li>If a <strong>REVIEW</strong> assignment includes linked groups, typed user approval is required before the assignment is saved.</li>
+    </ul>
   </section>
 
   <section id="implementation-checklist">
@@ -270,23 +375,70 @@
     <ul class="checklist">
       <li>Confirm selected tier: Basic or Pro.</li>
       <li>Confirm departments in scope.</li>
-      <li>Confirm whether mortgage and HELOC loans are included.</li>
+      <li>Confirm whether only consumer loans are included.</li>
+      <li>Confirm whether mortgage loans are included.</li>
+      <li>Confirm whether HELOC loans are included.</li>
       <li>Confirm whether simulation is needed during pilot validation.</li>
     </ul>
-    <h3>Loan Types and Officers</h3>
+    <h3>Loan Types</h3>
     <ul class="checklist">
       <li>Confirm all consumer loan types.</li>
       <li>Confirm all mortgage loan types, if using Pro.</li>
-      <li>Confirm full officer list and role assignments.</li>
+      <li>Confirm whether Credit Card loans are count-based or amount-based.</li>
+      <li>Confirm whether any loan types should be inactive or seasonal.</li>
+      <li>Confirm loan type names match operational terminology.</li>
+    </ul>
+    <h3>Officers</h3>
+    <ul class="checklist">
+      <li>Confirm full officer list.</li>
+      <li>Confirm officer names are spelled consistently.</li>
+      <li>Confirm officer roles.</li>
+      <li>Confirm Consumer officers.</li>
+      <li>Confirm Mortgage officers.</li>
+      <li>Confirm Flex officers.</li>
       <li>Confirm vacation/inactive handling policy.</li>
+    </ul>
+    <h3>Fairness Engine</h3>
+    <ul class="checklist">
+      <li>Confirm Global Fairness for Basic.</li>
+      <li>Confirm whether Pro should use Global Fairness or Officer Lane Fairness.</li>
+      <li>Confirm lane/role fairness assumptions with management.</li>
+      <li>Sign off on fairness methodology.</li>
+    </ul>
+    <h3>Working Folder and Retention</h3>
+    <ul class="checklist">
+      <li>Confirm output folder location.</li>
+      <li>Confirm monthly folder behavior.</li>
+      <li>Confirm who can access the folder.</li>
+      <li>Confirm PDF retention process.</li>
+      <li>Confirm CSV/JSON retention process.</li>
+      <li>Confirm backup or OneDrive/SharePoint sync process if applicable.</li>
+    </ul>
+    <h3>Operators</h3>
+    <ul class="checklist">
+      <li>Confirm who can run assignments.</li>
+      <li>Confirm who reviews reports.</li>
+      <li>Confirm who handles correction or exception cases.</li>
+      <li>Confirm how duplicate loan warnings are handled.</li>
     </ul>
     <h3>Operations</h3>
     <ul class="checklist">
-      <li>Confirm output folder location and retention process.</li>
-      <li>Confirm who can run assignments.</li>
-      <li>Confirm who reviews reports.</li>
-      <li>Run sample month validation.</li>
-      <li>Sign off on fairness methodology.</li>
+      <li>Run a sample Basic month if using Basic.</li>
+      <li>Run a sample Pro month if using Pro.</li>
+      <li>Confirm output PDFs are acceptable.</li>
+      <li>Confirm running totals persist after reload.</li>
+      <li>Confirm duplicate loan prevention behavior.</li>
+      <li>Confirm EOM reporting behavior if available.</li>
+      <li>Confirm tier lock/customer config behavior.</li>
+      <li>Confirm app version appears in UI and generated reports.</li>
+    </ul>
+    <h3>Sign-Off</h3>
+    <ul class="checklist">
+      <li>Lending team sign-off.</li>
+      <li>Operations/management sign-off.</li>
+      <li>IT/security review if using shared folders or synced storage.</li>
+      <li>Pilot start date confirmed.</li>
+      <li>Pilot review date confirmed.</li>
     </ul>
   </section>
 
@@ -310,10 +462,13 @@
   <section id="support-export">
     <h2>Support Export</h2>
     <p>The <strong>Export Support Package</strong> action creates a local JSON package for the active month or demo context. It does not upload, email, or send files anywhere.</p>
+    <h3>What It Creates</h3>
+    <p>The export downloads a JSON support package to the browser downloads folder. It does not upload anything and does not send files to LendingFair automatically.</p>
     <h3>Included Information</h3>
     <ul>
       <li>app name, version, release channel, and build date</li>
       <li>active tier, selected fairness engine, and license status</li>
+      <li>license type and expiration date when available</li>
       <li>customer mode and customer name, if configured</li>
       <li>export timestamp, browser user agent, and active month folder key</li>
       <li>running totals, loan history, and loan type configuration when present</li>
@@ -323,6 +478,23 @@
     </ul>
     <h3>Privacy Reminder</h3>
     <p>The support package may include loan IDs, officer names, and assignment history from the selected month. Only share it with authorized support contacts.</p>
+    <h3>When To Use It</h3>
+    <ul>
+      <li>assignments or running totals need review</li>
+      <li>duplicate loan history needs troubleshooting</li>
+      <li>a generated report needs to be matched to source CSV data</li>
+      <li>Basic/Pro tier behavior needs validation</li>
+      <li>support needs app version, tier, and license metadata for a pilot</li>
+    </ul>
+    <h3>What It Does Not Do</h3>
+    <ul>
+      <li>upload files to a backend</li>
+      <li>email files</li>
+      <li>collect data silently</li>
+      <li>include browser storage secrets</li>
+      <li>bypass tier entitlements</li>
+      <li>create a database backup</li>
+    </ul>
     <p>If support needs generated PDFs, attach the relevant PDFs from the active monthly folder along with the support package.</p>
   </section>
 
@@ -333,6 +505,8 @@
       <li>Basic assignment run completes with consumer loans.</li>
       <li>Basic blocks mortgage loan support.</li>
       <li>Basic blocks Officer Lane Fairness.</li>
+      <li>Basic blocks multiple officer roles such as Mortgage and Flex.</li>
+      <li>Basic hides or blocks file-based loan import.</li>
       <li>Basic blocks simulation access.</li>
       <li>Basic PDF includes app version and active tier.</li>
     </ul>
@@ -340,17 +514,79 @@
     <ul class="checklist">
       <li>Pro mortgage run completes.</li>
       <li>Pro role-aware run completes with Consumer, Mortgage, and Flex officers.</li>
+      <li>Pro file-based loan import is available.</li>
+      <li>Pro import preview and confirm flow works.</li>
+      <li>Imported loans still generate valid assignments and PDFs.</li>
+      <li>Duplicate loan prevention still works for imported loans.</li>
       <li>Pro simulation allows 60 business days.</li>
       <li>Pro simulation above 60 business days is blocked.</li>
       <li>Pro PDF includes app version and active tier.</li>
+      <li>Pro EOM report works if available in the package.</li>
+    </ul>
+    <h3>Platinum Verification, If Testing</h3>
+    <ul class="checklist">
+      <li>Platinum simulation above 60 business days is allowed, subject to existing validation.</li>
+      <li>Platinum-only controls are available as expected.</li>
+      <li>Platinum generated reports include app version and active tier.</li>
     </ul>
     <h3>Persistence and Handoff</h3>
     <ul class="checklist">
       <li>Duplicate loan prevention works.</li>
       <li>CSV persistence works after app reload.</li>
+      <li>Monthly folder is created/used correctly.</li>
+      <li>EOM report works if available.</li>
+      <li>Version appears in UI footer.</li>
+      <li>Version appears in assignment report.</li>
+      <li>Version appears in EOM/custom/simulation reports when generated.</li>
+      <li>Support package export downloads locally and includes app version, active tier, license status, and missing-file notes.</li>
       <li>Customer config locks the intended tier.</li>
       <li>Version appears in UI and reports.</li>
       <li>Customer has reviewed guides, methodology, and known limitations.</li>
+    </ul>
+    <h3>Customer Configuration</h3>
+    <ul class="checklist">
+      <li>Customer config locks the intended tier.</li>
+      <li>Installed license tier is authoritative over customer config tier when present.</li>
+      <li>Customer config overrides any saved development/localStorage tier.</li>
+      <li>Internal Tier Mode is hidden in customer mode.</li>
+      <li>Demo controls are hidden in customer mode unless explicitly enabled.</li>
+      <li>Invalid or missing customer tier fails closed and shows a configuration error.</li>
+      <li>Customer name appears if configured.</li>
+    </ul>
+    <h3>Pilot Handoff</h3>
+    <ul class="checklist">
+      <li>Customer has received the Getting Started guide.</li>
+      <li>Customer has received the Basic or Pro user guide.</li>
+      <li>Customer has reviewed the Fairness Methodology.</li>
+      <li>Customer has reviewed Known Limitations.</li>
+      <li>Customer understands pilot license expiration/renewal process.</li>
+      <li>Customer has agreed to pilot scope and review cadence.</li>
+    </ul>
+    <h3>Fairness Review Workflow</h3>
+    <ul class="checklist">
+      <li>PASS assignments continue to save normally.</li>
+      <li>ADVISORY assignments save without approver confirmation and are clearly labeled in the audit/report.</li>
+      <li>REVIEW assignments trigger additional assignment attempts.</li>
+      <li>Attempts are capped and do not run indefinitely.</li>
+      <li>Best available assignment is selected and shown.</li>
+      <li>If selected status remains REVIEW, approver confirmation is required.</li>
+      <li>No running totals/history/PDF side effects occur before confirmation for REVIEW status outcomes.</li>
+      <li>Fairness audit/report metadata shows attempts evaluated, selected attempt, and approver confirmation fields.</li>
+      <li>One-loan count spread tolerance is documented in the audit when it applies.</li>
+      <li>Material dollar imbalance remains REVIEW and explains that loan amount mix/officer eligibility may contribute.</li>
+      <li>Missing HELOC weighted metric uses support-lane fallback instead of failing solely from the missing metric.</li>
+      <li>Single-MLO expected variance remains protected while policy failures still require REVIEW.</li>
+    </ul>
+    <h3>Linked Member Loan Groups</h3>
+    <ul class="checklist">
+      <li>Basic blocks linked loan groups.</li>
+      <li>Pro allows linked loan groups.</li>
+      <li>Linked groups of two or more loans assign all included loans to one officer.</li>
+      <li>Ineligible mixed groups are blocked before assignment.</li>
+      <li>Linked group badges appear in the loan list and assignment results.</li>
+      <li>Linked group metadata appears in the PDF fairness audit section.</li>
+      <li>REVIEW assignments that include linked groups require typed approver first and last name before save.</li>
+      <li>Approved linked-group REVIEW assignments record approval name, timestamp, and reason.</li>
     </ul>
   </section>
 </div>

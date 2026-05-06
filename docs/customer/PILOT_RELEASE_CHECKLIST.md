@@ -84,13 +84,13 @@ Use this checklist before sharing a pilot build with a credit union.
 ## Fairness Review Workflow
 
 - [ ] PASS assignments continue to save normally.
-- [ ] ADVISORY assignments save without manager confirmation and are clearly labeled in the audit/report.
+- [ ] ADVISORY assignments save without approver confirmation and are clearly labeled in the audit/report.
 - [ ] REVIEW assignments trigger additional assignment attempts.
 - [ ] Attempts are capped and do not run indefinitely.
 - [ ] Best available assignment is selected and shown.
-- [ ] If selected status remains REVIEW, manager confirmation is required.
+- [ ] If selected status remains REVIEW, approver confirmation is required.
 - [ ] No running totals/history/PDF side effects occur before confirmation for REVIEW status outcomes.
-- [ ] Fairness audit/report metadata shows attempts evaluated, selected attempt, and manager confirmation fields.
+- [ ] Fairness audit/report metadata shows attempts evaluated, selected attempt, and approver confirmation fields.
 - [ ] One-loan count spread tolerance is documented in the audit when it applies.
 - [ ] Material dollar imbalance remains REVIEW and explains that loan amount mix/officer eligibility may contribute.
 - [ ] Missing HELOC weighted metric uses support-lane fallback instead of failing solely from the missing metric.
@@ -100,9 +100,9 @@ Use this checklist before sharing a pilot build with a credit union.
 
 - [ ] Basic blocks linked loan groups.
 - [ ] Pro allows linked loan groups.
-- [ ] Linked groups of 2 or more loans assign all included loans to one officer.
+- [ ] Linked groups of two or more loans assign all included loans to one officer.
 - [ ] Ineligible mixed groups are blocked before assignment.
 - [ ] Linked group badges appear in the loan list and assignment results.
 - [ ] Linked group metadata appears in the PDF fairness audit section.
-- [ ] REVIEW assignments that include linked groups require typed manager first and last name before save.
+- [ ] REVIEW assignments that include linked groups require typed approver first and last name before save.
 - [ ] Approved linked-group REVIEW assignments record approval name, timestamp, and reason.
