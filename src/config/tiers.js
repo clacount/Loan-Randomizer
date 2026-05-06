@@ -37,6 +37,7 @@
     RUNNING_TOTALS_REPORT: 'running_totals_report',
     EOM_REPORT: 'eom_report',
     IMPORT_LOANS: 'import_loans',
+    LINKED_LOAN_GROUPS: 'linked_loan_groups',
     SIMULATION: 'simulation',
     LIVE_RUNS: 'live_runs',
     CUSTOM_BRANDING: 'custom_branding',
@@ -64,6 +65,7 @@
     FEATURES.FAIRNESS_AUDIT_REPORT,
     FEATURES.EOM_REPORT,
     FEATURES.IMPORT_LOANS,
+    FEATURES.LINKED_LOAN_GROUPS,
     FEATURES.SIMULATION
   ];
 
@@ -395,6 +397,16 @@
     }
 
     const categories = new Set((Array.isArray(loans) ? loans : []).map(inferLoanCategory));
+    const hasLinkedLoanGroups = (Array.isArray(loans) ? loans : []).some((loan) => String(loan?.linkedGroupId || '').trim());
+    if (hasLinkedLoanGroups && !canUseFeature(FEATURES.LINKED_LOAN_GROUPS, runTier)) {
+      return buildValidationFailure(
+        'LINKED_LOAN_GROUPS_NOT_AVAILABLE',
+        'Linked loan groups require Pro or Platinum.',
+        FEATURES.LINKED_LOAN_GROUPS,
+        runTier
+      );
+    }
+
     if (categories.has(LOAN_CATEGORIES.MORTGAGE) && !canUseLoanCategory(LOAN_CATEGORIES.MORTGAGE, runTier)) {
       return buildValidationFailure(
         'MORTGAGE_LOANS_NOT_AVAILABLE',

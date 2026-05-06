@@ -182,6 +182,7 @@
             <h3>Loans</h3>
             <div class="section-actions">
               <button id="importLoansBtn" type="button">Import CSV</button>
+              <button id="linkLoansBtn" type="button">Link Loans</button>
               <button id="addLoanBtn" type="button">Add Loan</button>
             </div>
           </div>
@@ -193,6 +194,7 @@
             <span></span>
           </div>
           <div id="loanList" class="stack"></div>
+          <div id="linkedGroupSummary" class="linked-group-summary" hidden></div>
         </section>
       </div>
     </section>
@@ -315,6 +317,37 @@
       <button id="cancelFairnessReviewModalBtn" type="button">Cancel</button>
       <button id="denyFairnessReviewBtn" type="button">Deny</button>
       <button id="approveFairnessReviewBtn" class="primary" type="button">Approve Assignment</button>
+    </div>
+  </div>
+</div>
+
+<div id="linkedLoanGroupModal" class="modal-overlay" hidden>
+  <div class="modal-card linked-loan-group-modal-card" role="dialog" aria-modal="true" aria-labelledby="linkedLoanGroupModalTitle">
+    <div class="modal-header">
+      <div>
+        <h2 id="linkedLoanGroupModalTitle">Linked Member Loan Group</h2>
+        <p class="hint">Link 2 or more loans so one officer handles the member relationship. This is treated as a fairness exception and will be documented.</p>
+      </div>
+      <button id="closeLinkedLoanGroupModalBtn" class="modal-close-btn" type="button" aria-label="Close linked loan group modal">×</button>
+    </div>
+    <div class="linked-loan-group-body">
+      <div id="linkedLoanGroupModalMessage" class="message"></div>
+      <div id="linkedLoanGroupLoanList" class="linked-loan-group-loan-list"></div>
+      <div class="linked-loan-group-form">
+        <label>
+          <span>Group label</span>
+          <input id="linkedLoanGroupLabelInput" type="text" placeholder="Member 2048" />
+        </label>
+        <label>
+          <span>Reason</span>
+          <input id="linkedLoanGroupReasonInput" type="text" placeholder="Member relationship continuity" />
+        </label>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button id="removeSelectedLinkedLoansBtn" type="button">Remove Selected From Group</button>
+      <button id="cancelLinkedLoanGroupBtn" type="button">Cancel</button>
+      <button id="saveLinkedLoanGroupBtn" class="primary" type="button">Create Linked Group</button>
     </div>
   </div>
 </div>
@@ -589,6 +622,7 @@
 <script src="src/services/fairnessDisplayService.js"></script>
 <script src="src/services/fairnessReviewWorkflowService.js"></script>
 <script src="src/services/focusWeightSettingsService.js"></script>
+<script src="src/services/linkedLoanGroupService.js"></script>
 <script src="src/services/mortgageFocusRoutingService.js"></script>
 <script src="src/services/officerLaneOptimizationService.js"></script>
 <script src="src/services/supportExportService.js"></script>

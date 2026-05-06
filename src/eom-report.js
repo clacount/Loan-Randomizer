@@ -61,6 +61,70 @@
       });
   }
 
+  function buildLinkedGroupHistorySummary(entries = []) {
+    const groupMap = new Map();
+
+    entries.forEach((entry) => {
+      const linkedGroupId = String(entry?.linkedGroupId || '').trim();
+      if (!linkedGroupId) {
+        return;
+      }
+
+      if (!groupMap.has(linkedGroupId)) {
+        groupMap.set(linkedGroupId, {
+          linkedGroupId,
+          linkedGroupLabel: String(entry.linkedGroupLabel || linkedGroupId).trim(),
+          linkedGroupReason: String(entry.linkedGroupReason || '').trim(),
+          loanNames: [],
+          loanTypes: {},
+          assignedOfficers: new Set(),
+          totalAmountRequested: 0,
+          generatedAtValues: [],
+          approvedBy: '',
+          approvedAt: '',
+          approvalReason: '',
+          linkedGroupExceptionAcknowledged: false
+        });
+      }
+
+      const group = groupMap.get(linkedGroupId);
+      group.loanNames.push(entry.loanName);
+      group.loanTypes[entry.type] = (group.loanTypes[entry.type] || 0) + 1;
+      group.totalAmountRequested += Number(entry.amountRequested) || 0;
+      if (entry.assignedOfficer) {
+        group.assignedOfficers.add(entry.assignedOfficer);
+      }
+      if (entry.generatedAt) {
+        group.generatedAtValues.push(entry.generatedAt);
+      }
+      if (!group.linkedGroupReason && entry.linkedGroupReason) {
+        group.linkedGroupReason = String(entry.linkedGroupReason).trim();
+      }
+      if (!group.approvedBy && entry.approvedBy) {
+        group.approvedBy = String(entry.approvedBy).trim();
+      }
+      if (!group.approvedAt && entry.approvedAt) {
+        group.approvedAt = String(entry.approvedAt).trim();
+      }
+      if (!group.approvalReason && entry.approvalReason) {
+        group.approvalReason = String(entry.approvalReason).trim();
+      }
+      if (entry.linkedGroupExceptionAcknowledged) {
+        group.linkedGroupExceptionAcknowledged = true;
+      }
+    });
+
+    return Array.from(groupMap.values())
+      .map((group) => ({
+        ...group,
+        loanNames: group.loanNames.sort((loanA, loanB) => loanA.localeCompare(loanB)),
+        assignedOfficers: Array.from(group.assignedOfficers).sort((officerA, officerB) => officerA.localeCompare(officerB)),
+        generatedAt: group.generatedAtValues.sort()[0] || '',
+        linkedGroupReason: group.linkedGroupReason || 'Member relationship continuity'
+      }))
+      .sort((groupA, groupB) => (groupA.generatedAt || '').localeCompare(groupB.generatedAt || '') || groupA.linkedGroupLabel.localeCompare(groupB.linkedGroupLabel));
+  }
+
   function buildOfficerMonthlyStats(runningTotals) {
     return Object.entries(runningTotals?.officers || {})
       .sort(([officerA], [officerB]) => officerA.localeCompare(officerB))
@@ -339,6 +403,7 @@
   function buildEomPdfLines(report) {
     const generatedAtLabel = formatDisplayTimestamp(report.generatedAt);
     const fairnessEngineLabel = fairnessDisplayService?.getFairnessModelLabel(report.fairnessSummary.evaluation.engineType) || 'Global Fairness';
+    const linkedGroupSummary = buildLinkedGroupHistorySummary(report.loanHistoryEntries);
     const releaseMetadataLines = window.LendingFairAppMetadata?.buildReportMetadataLines?.({
       generatedAtLabel,
       fairnessEngineLabel
@@ -358,6 +423,12 @@
       { text: `Goal dollar variance: ${report.fairnessSummary.maxAmountVariancePercent.toFixed(1)}%`, size: 11, gapAfter: 4 },
       { text: `Fairness status: ${report.fairnessSummary.overallStatus}`, size: 11, gapAfter: 4 },
       { text: `Fairness model: ${fairnessEngineLabel}`, size: 11, gapAfter: 4 },
+      ...(linkedGroupSummary.length
+        ? [
+            { text: 'Linked member loan groups were included in this reporting period and may have contributed to observed variance.', size: 11, gapAfter: 4 },
+            { text: 'Approved linked-group fairness exceptions are listed below for audit traceability.', size: 11, gapAfter: 4 }
+          ]
+        : []),
       ...report.fairnessSummary.evaluation.summaryItems.map((item) => ({ text: item, size: 11, gapAfter: 4 })),
       ...buildEvaluationNoteLines(report.fairnessSummary.evaluation.notes),
       { text: '', size: 10, gapAfter: 6 },
@@ -378,11 +449,41 @@
     report.loanHistoryEntries.forEach((entry) => {
       const generatedAtLabel = entry.generatedAt ? new Date(entry.generatedAt).toLocaleString() : 'Unknown date';
       lines.push({
-        text: `${generatedAtLabel} | ${entry.loanName} (${entry.type}, ${formatCurrency(entry.amountRequested)}) -> ${entry.assignedOfficer}`,
+        text: `${generatedAtLabel} | ${entry.loanName} (${entry.type}, ${formatCurrency(entry.amountRequested)}) -> ${entry.assignedOfficer}${entry.linkedGroupId ? ` | Linked group: ${entry.linkedGroupLabel || entry.linkedGroupId}` : ''}`,
         size: 10,
         gapAfter: 4
       });
     });
+
+    if (linkedGroupSummary.length) {
+      lines.push({ text: '', size: 11, gapAfter: 8 });
+      lines.push({ text: 'Linked Member Loan Groups', size: 14, gapAfter: 10 });
+      linkedGroupSummary.forEach((group) => {
+        const generatedAtLabel = group.generatedAt ? new Date(group.generatedAt).toLocaleString() : 'Unknown date';
+        lines.push({
+          text: `${generatedAtLabel} | ${group.linkedGroupLabel} (${group.linkedGroupId}) | Assigned officer: ${group.assignedOfficers.join(', ') || 'Unknown'} | Group total: ${formatCurrency(group.totalAmountRequested)}`,
+          size: 10,
+          gapAfter: 4
+        });
+        lines.push({
+          text: `Loans: ${group.loanNames.join(', ')} | Types: ${formatTypeCounts(group.loanTypes)}`,
+          size: 10,
+          gapAfter: 4
+        });
+        lines.push({
+          text: `Reason: ${group.linkedGroupReason}${group.linkedGroupExceptionAcknowledged ? ' | Fairness exception acknowledged: Yes' : ''}`,
+          size: 10,
+          gapAfter: 4
+        });
+        if (group.approvedBy) {
+          lines.push({
+            text: `Approved by: ${group.approvedBy}${group.approvedAt ? ` on ${new Date(group.approvedAt).toLocaleString()}` : ''}${group.approvalReason ? ` | Approval reason: ${group.approvalReason}` : ''}`,
+            size: 10,
+            gapAfter: 4
+          });
+        }
+      });
+    }
 
     if (canUseFeature(entitlements?.FEATURES?.FAIRNESS_AUDIT_REPORT) && report.distributionCharts.length) {
       lines.push({ text: '', size: 11, gapAfter: 8 });
@@ -396,6 +497,7 @@
   function buildCustomReportPdfLines(report) {
     const generatedAtLabel = formatDisplayTimestamp(report.generatedAt);
     const fairnessEngineLabel = fairnessDisplayService?.getFairnessModelLabel(report.fairnessSummary.evaluation.engineType) || 'Global Fairness';
+    const linkedGroupSummary = buildLinkedGroupHistorySummary(report.loanHistoryEntries);
     const releaseMetadataLines = window.LendingFairAppMetadata?.buildReportMetadataLines?.({
       generatedAtLabel,
       fairnessEngineLabel
@@ -417,6 +519,10 @@
       lines.push({ text: `Average dollars per officer: ${formatCurrency(report.fairnessSummary.averageDollarAmount)}`, size: 11, gapAfter: 4 });
       lines.push({ text: `Fairness status: ${report.fairnessSummary.overallStatus}`, size: 11, gapAfter: 4 });
       lines.push({ text: `Fairness model: ${fairnessEngineLabel}`, size: 11, gapAfter: 4 });
+      if (linkedGroupSummary.length) {
+        lines.push({ text: 'Linked member loan groups were included in this reporting period and may have contributed to observed variance.', size: 11, gapAfter: 4 });
+        lines.push({ text: 'Approved linked-group fairness exceptions are listed below for audit traceability.', size: 11, gapAfter: 4 });
+      }
       report.fairnessSummary.evaluation.summaryItems.forEach((item) => {
         lines.push({ text: item, size: 11, gapAfter: 4 });
       });
@@ -447,6 +553,9 @@
       lines.push({ text: `Highest dollar total: ${formatCurrency(report.fairnessSummary.highestDollarAmount)}`, size: 11, gapAfter: 4 });
       lines.push({ text: `Lowest dollar total: ${formatCurrency(report.fairnessSummary.lowestDollarAmount)}`, size: 11, gapAfter: 4 });
       lines.push({ text: `Fairness model: ${fairnessEngineLabel}`, size: 11, gapAfter: 4 });
+      if (linkedGroupSummary.length) {
+        lines.push({ text: 'Linked member loan groups were included in this reporting period and may have contributed to observed variance.', size: 11, gapAfter: 4 });
+      }
       report.fairnessSummary.evaluation.summaryItems.forEach((item) => {
         lines.push({ text: item, size: 11, gapAfter: 4 });
       });
@@ -461,10 +570,40 @@
       report.loanHistoryEntries.forEach((entry) => {
         const generatedAtLabel = entry.generatedAt ? new Date(entry.generatedAt).toLocaleString() : 'Unknown date';
         lines.push({
-          text: `${generatedAtLabel} | ${entry.loanName} (${entry.type}, ${formatCurrency(entry.amountRequested)}) -> ${entry.assignedOfficer}`,
+          text: `${generatedAtLabel} | ${entry.loanName} (${entry.type}, ${formatCurrency(entry.amountRequested)}) -> ${entry.assignedOfficer}${entry.linkedGroupId ? ` | Linked group: ${entry.linkedGroupLabel || entry.linkedGroupId}` : ''}`,
           size: 10,
           gapAfter: 4
         });
+      });
+    }
+
+    if (linkedGroupSummary.length) {
+      lines.push({ text: '', size: 11, gapAfter: 8 });
+      lines.push({ text: 'Linked Member Loan Groups', size: 14, gapAfter: 10 });
+      linkedGroupSummary.forEach((group) => {
+        const generatedAtLabel = group.generatedAt ? new Date(group.generatedAt).toLocaleString() : 'Unknown date';
+        lines.push({
+          text: `${generatedAtLabel} | ${group.linkedGroupLabel} (${group.linkedGroupId}) | Assigned officer: ${group.assignedOfficers.join(', ') || 'Unknown'} | Group total: ${formatCurrency(group.totalAmountRequested)}`,
+          size: 10,
+          gapAfter: 4
+        });
+        lines.push({
+          text: `Loans: ${group.loanNames.join(', ')} | Types: ${formatTypeCounts(group.loanTypes)}`,
+          size: 10,
+          gapAfter: 4
+        });
+        lines.push({
+          text: `Reason: ${group.linkedGroupReason}${group.linkedGroupExceptionAcknowledged ? ' | Fairness exception acknowledged: Yes' : ''}`,
+          size: 10,
+          gapAfter: 4
+        });
+        if (group.approvedBy) {
+          lines.push({
+            text: `Approved by: ${group.approvedBy}${group.approvedAt ? ` on ${new Date(group.approvedAt).toLocaleString()}` : ''}${group.approvalReason ? ` | Approval reason: ${group.approvalReason}` : ''}`,
+            size: 10,
+            gapAfter: 4
+          });
+        }
       });
     }
 

@@ -105,6 +105,18 @@ Pro includes fairness simulation up to 60 business days. Simulations are intende
 
 Platinum is intended to allow unlimited simulation subject to normal input validation.
 
+## Linked Member Loan Groups
+
+Pro includes **Linked Member Loan Groups** for member relationship continuity.
+
+- Link 2 or more related loans so they are assigned to the same officer.
+- The linked group is treated as one assignment unit when the officer is selected.
+- Fairness still evaluates the final result loan by loan, so linked groups can increase variance and may contribute to REVIEW.
+- Mixed consumer/mortgage linked groups require one officer who is eligible for every loan in the group.
+- REVIEW assignments that include linked groups require typed manager approval before final save.
+
+Use this feature as an operational exception for member service continuity, not as a way to override normal fairness expectations.
+
 ## What Pro Does Not Include
 
 Pro does not include:

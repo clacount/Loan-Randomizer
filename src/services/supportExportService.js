@@ -55,6 +55,7 @@
     monthFolderKey = '',
     sessionMode = 'production',
     licenseMetadata = {},
+    linkedLoanGroupMetadata = {},
     files = [],
     reportFilenames = []
   } = {}) {
@@ -89,6 +90,11 @@
         expiresAt: licenseMetadata.expiresAt || '',
         licenseStatus: licenseMetadata.licenseStatus || '',
         activeTier: licenseMetadata.activeTier || activeTier
+      },
+      linkedLoanGroups: {
+        linkedGroupCount: Number(linkedLoanGroupMetadata.linkedGroupCount) || 0,
+        linkedGroups: Array.isArray(linkedLoanGroupMetadata.linkedGroups) ? linkedLoanGroupMetadata.linkedGroups : [],
+        approval: linkedLoanGroupMetadata.approval || null
       },
       files: normalizedFiles,
       reports: normalizeReportFilenames(reportFilenames),
