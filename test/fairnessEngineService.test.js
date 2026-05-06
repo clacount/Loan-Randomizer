@@ -117,6 +117,71 @@ test('officer_lane consumer variance includes flex officers that receive consume
   assert.match(evaluation.summaryItems.join(' | '), /Jade/i);
 });
 
+test('officer_lane does not let flex-only imbalance force REVIEW when consumer and mortgage lanes pass', () => {
+  const evaluation = global.FairnessEngineService.evaluateFairness({
+    engineType: 'officer_lane',
+    officers: [
+      { name: 'Ashley', eligibility: { consumer: true, mortgage: false } },
+      { name: 'Peter', eligibility: { consumer: true, mortgage: true } },
+      { name: 'Jade', eligibility: { consumer: true, mortgage: true } },
+      { name: 'Kash', eligibility: { consumer: false, mortgage: true } }
+    ],
+    officerStats: [
+      {
+        officer: 'Peter',
+        totalLoans: 3,
+        totalAmount: 25700,
+        consumerLoanCount: 3,
+        consumerAmount: 25700,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        typeBreakdown: { 'Credit Card': 1, Personal: 1, Auto: 1 }
+      },
+      {
+        officer: 'Jade',
+        totalLoans: 3,
+        totalAmount: 71000,
+        consumerLoanCount: 2,
+        consumerAmount: 25000,
+        mortgageLoanCount: 1,
+        mortgageAmount: 46000,
+        typeBreakdown: { Collateralized: 1, 'Credit Card': 1, HELOC: 1 }
+      },
+      {
+        officer: 'Ashley',
+        totalLoans: 3,
+        totalAmount: 23800,
+        consumerLoanCount: 3,
+        consumerAmount: 23800,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        typeBreakdown: { Collateralized: 1, Personal: 2 }
+      },
+      {
+        officer: 'Kash',
+        totalLoans: 1,
+        totalAmount: 38500,
+        consumerLoanCount: 0,
+        consumerAmount: 0,
+        mortgageLoanCount: 1,
+        mortgageAmount: 38500,
+        typeBreakdown: { HELOC: 1 }
+      }
+    ]
+  });
+
+  assert.equal(evaluation.metrics.consumerVariance.maxCountVariancePercent <= 15, true);
+  assert.equal(evaluation.metrics.consumerVariance.maxAmountVariancePercent <= 20, true);
+  assert.equal(evaluation.metrics.mortgageVariance.maxCountVariancePercent <= 15, true);
+  assert.equal(evaluation.metrics.mortgageVariance.maxAmountVariancePercent <= 20, true);
+  assert.equal(evaluation.metrics.flexVariance.maxAmountVariancePercent > 25, true);
+  assert.equal(evaluation.overallResult, 'ADVISORY');
+  assert.equal(evaluation.statusMetricDescriptor?.key, 'flex_lane_dollar_variance');
+  assert.equal(evaluation.statusMetricDescriptor?.contextLabel, 'Flex support monitoring');
+  assert.equal(evaluation.roleAwareFlags?.flexVarianceNonBlocking, true);
+  assert.match(evaluation.notes.join(' '), /does not independently force REVIEW/i);
+});
+
 test('homogeneous HELOC support pool can PASS with specialized thresholds and weighted optimization target', () => {
   const evaluation = global.FairnessEngineService.evaluateFairness({
     engineType: 'officer_lane',
