@@ -53,7 +53,7 @@
     determineOfficerLaneOverallPass(context = {}) {
       return Boolean(
         context.consumerPass
-        && context.flexLanePass
+        && (context.useFlexAsBlockingLane ? context.flexLanePass : true)
         && context.mortgageRoutingPass
         && !context.flexParticipationViolation
         && !this.isMortgageLaneVarianceBlockingReview(context)
@@ -205,6 +205,11 @@
       const adjustedFlexLanePass = isHelocOnlySupportPool
         ? helocSupportPass
         : (!hasFlexLane || flexLanePass);
+      const hasPrimaryRoleLane = hasConsumerLane || hasMortgageLane;
+      const flexVarianceNonBlocking = !isHelocOnlySupportPool
+        && hasPrimaryRoleLane
+        && hasFlexLane
+        && !adjustedFlexLanePass;
       const flexMinimalParticipationInformational = flexMinimalParticipationToleranceApplied
         && (!isHelocOnlySupportPool || adjustedFlexLanePass);
 
@@ -215,6 +220,7 @@
           consumerPass: adjustedConsumerPass,
           mortgageLanePass: adjustedMortgageLanePass,
           flexLanePass: adjustedFlexLanePass,
+          useFlexAsBlockingLane: !flexVarianceNonBlocking,
           mortgageRoutingPass,
           flexParticipationViolation
         });
@@ -222,6 +228,7 @@
         isConsumerDollarInAdvisoryBand
         || isMortgageDollarInAdvisoryBand
         || isFlexDollarInAdvisoryBand
+        || flexVarianceNonBlocking
         || (isHelocOnlySupportPool && helocSupportThresholds.advisoryBandApplied)
       );
 
@@ -310,12 +317,19 @@
           valuePercent: mortgageRoutingShareToM * 100,
           contextLabel: 'Mortgage lane policy checks'
         };
-      } else if (hasFlexLane && !adjustedFlexLanePass) {
+      } else if (hasFlexLane && !adjustedFlexLanePass && !flexVarianceNonBlocking) {
         statusMetricDescriptor = this.buildLaneVarianceStatusDescriptor({
           laneKeyPrefix: 'flex_lane',
           laneLabel: 'Flex lane',
           laneVariance: categoryMetrics.flexVariance,
           contextLabel: 'Flex lane thresholds'
+        });
+      } else if (flexVarianceNonBlocking) {
+        statusMetricDescriptor = this.buildLaneVarianceStatusDescriptor({
+          laneKeyPrefix: 'flex_lane',
+          laneLabel: 'Flex lane',
+          laneVariance: categoryMetrics.flexVariance,
+          contextLabel: 'Flex support monitoring'
         });
       } else if (hasConsumerLane) {
         statusMetricDescriptor = this.buildLaneVarianceStatusDescriptor({
@@ -389,6 +403,9 @@
           ...(flexMinimalParticipationInformational
             ? ['Flex lane variance is informational because current flex participation is below the minimum volume for strict review.']
             : []),
+          ...(flexVarianceNonBlocking
+            ? ['Flex variance is being tracked for monitoring only in this run and does not independently force REVIEW when Consumer/Mortgage lane thresholds pass.']
+            : []),
           ...(helocWeightedMetricUnavailable
             ? ['Weighted HELOC optimization metric was unavailable; standard support-lane variance was used.']
             : []),
@@ -434,6 +451,7 @@
           helocWeightedMetricUnavailable,
           consumerDollarAdvisoryBandApplied: isConsumerDollarInAdvisoryBand,
           helocOnlySupportThresholdsApplied: isHelocOnlySupportPool,
+          flexVarianceNonBlocking,
           flexParticipationExpected: this.isFlexMortgageParticipationExpected({
             totalMortgageAmount,
             activeMortgageOnlyOfficerCount,
