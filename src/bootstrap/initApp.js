@@ -4,6 +4,7 @@ const addOfficerBtn = document.getElementById('addOfficerBtn');
 const importPriorMonthBtn = document.getElementById('importPriorMonthBtn');
 const addLoanBtn = document.getElementById('addLoanBtn');
 const importLoansBtn = document.getElementById('importLoansBtn');
+const linkLoansBtn = document.getElementById('linkLoansBtn');
 const chooseFolderBtn = document.getElementById('chooseFolderBtn');
 const launchDemoModeBtn = document.getElementById('launchDemoModeBtn');
 const changeFolderBtn = document.getElementById('changeFolderBtn');
@@ -34,10 +35,20 @@ const cancelFairnessReviewModalBtn = document.getElementById('cancelFairnessRevi
 const approveFairnessReviewBtn = document.getElementById('approveFairnessReviewBtn');
 const denyFairnessReviewBtn = document.getElementById('denyFairnessReviewBtn');
 const fairnessReviewModalBodyEl = document.getElementById('fairnessReviewModalBody');
+const linkedLoanGroupModalEl = document.getElementById('linkedLoanGroupModal');
+const closeLinkedLoanGroupModalBtn = document.getElementById('closeLinkedLoanGroupModalBtn');
+const cancelLinkedLoanGroupBtn = document.getElementById('cancelLinkedLoanGroupBtn');
+const saveLinkedLoanGroupBtn = document.getElementById('saveLinkedLoanGroupBtn');
+const removeSelectedLinkedLoansBtn = document.getElementById('removeSelectedLinkedLoansBtn');
+const linkedLoanGroupModalMessageEl = document.getElementById('linkedLoanGroupModalMessage');
+const linkedLoanGroupLoanListEl = document.getElementById('linkedLoanGroupLoanList');
+const linkedLoanGroupLabelInput = document.getElementById('linkedLoanGroupLabelInput');
+const linkedLoanGroupReasonInput = document.getElementById('linkedLoanGroupReasonInput');
 const messageEl = document.getElementById('message');
 const step1MessageEl = document.getElementById('step1Message');
 const step2MessageEl = document.getElementById('step2Message');
 const step3MessageEl = document.getElementById('step3Message');
+const linkedGroupSummaryEl = document.getElementById('linkedGroupSummary');
 const outputStepEl = document.getElementById('outputStep');
 const outputStepCompactEl = document.getElementById('outputStepCompact');
 const outputStepDetailsEl = document.getElementById('outputStepDetails');
@@ -113,8 +124,12 @@ const loanTypeEditorModalMessageEl = document.getElementById('loanTypeEditorModa
 const distributionDetailsEl = document.getElementById('distributionDetails');
 const distributionChartsEl = document.getElementById('distributionCharts');
 const fairnessReviewService = window.FairnessReviewWorkflowService || window.FairnessReviewService;
+const linkedLoanGroupService = window.LinkedLoanGroupService;
 const FAIRNESS_REVIEW_MAX_ATTEMPTS = fairnessReviewService?.FAIRNESS_REVIEW_MAX_ATTEMPTS || 5;
 let pendingReviewAssignment = null;
+let latestAssignmentResult = null;
+let isAssignmentCommitInProgress = false;
+let currentRunFinalized = false;
 const entitlements = window.LendingFairEntitlements;
 const customerConfig = window.LendingFairCustomerConfig;
 const licenseManager = window.LendingFairLicenseManager;
@@ -688,6 +703,12 @@ function refreshFairnessEngineUi() {
   updateEntitlementUi();
   syncHeaderLogoBranding();
   refreshLoanTypeSelects();
+  if (linkLoansBtn) {
+    const linkedGroupsAvailable = canUseFeature(entitlements?.FEATURES?.LINKED_LOAN_GROUPS);
+    linkLoansBtn.disabled = !linkedGroupsAvailable || Boolean(getLicenseGuardMessage('ui'));
+    linkLoansBtn.title = linkedGroupsAvailable ? '' : 'Linked loan groups require Pro or Platinum.';
+  }
+  renderLinkedGroupSummary();
   syncFairnessModelSelect();
   updateFairnessMethodologyCopy();
   renderScenarioEngineRecommendation();
@@ -1020,6 +1041,31 @@ function downloadSupportPackage(manifest) {
   return fileName;
 }
 
+function buildLinkedGroupSupportMetadata() {
+  const linkedGroups = latestAssignmentResult?.linkedLoanGroups || getCurrentLinkedLoanGroups();
+  return {
+    linkedGroupCount: linkedGroups.length,
+    linkedGroups: linkedGroups.map((group) => ({
+      linkedGroupId: group.linkedGroupId,
+      linkedGroupLabel: group.linkedGroupLabel,
+      linkedGroupReason: group.linkedGroupReason,
+      assignedOfficer: group.assignedOfficer || '',
+      loans: (group.loans || []).map((loan) => ({
+        name: loan.name,
+        type: loan.type,
+        amountRequested: loan.amountRequested
+      }))
+    })),
+    approval: latestAssignmentResult?.fairnessReview?.approvedBy
+      ? {
+          approvedBy: latestAssignmentResult.fairnessReview.approvedBy,
+          approvedAt: latestAssignmentResult.fairnessReview.approvedAt || '',
+          approvalReason: latestAssignmentResult.fairnessReview.approvalReason || ''
+        }
+      : null
+  };
+}
+
 async function handleSupportExportClick() {
   const supportExport = window.LendingFairSupportExport;
   if (!supportExport) {
@@ -1063,6 +1109,7 @@ async function handleSupportExportClick() {
       monthFolderKey: isDemoMode ? DEMO_DATA_FOLDER_NAME : getMonthFolderKey(),
       sessionMode: isDemoMode ? 'demo' : 'production',
       licenseMetadata: licenseManager?.getSupportMetadata?.() || {},
+      linkedLoanGroupMetadata: buildLinkedGroupSupportMetadata(),
       files,
       reportFilenames: await listSupportReportFilenames(dataDirectoryHandle)
     });
@@ -1858,7 +1905,7 @@ function openOfficerEditorModal(row = null) {
   officerEditorNameInput?.focus();
 }
 
-function createInputRow(type, value = '', loanType = '', amount = '', isOnVacation = false, officerConfig = {}) {
+function createInputRow(type, value = '', loanType = '', amount = '', isOnVacation = false, officerConfig = {}, loanMetadata = {}) {
   const row = document.createElement('div');
   row.className = type === 'loan' ? 'row loan-row' : 'row officer-row';
 
@@ -1872,7 +1919,15 @@ function createInputRow(type, value = '', loanType = '', amount = '', isOnVacati
   removeBtn.type = 'button';
   removeBtn.textContent = '×';
   removeBtn.className = 'remove-btn';
-  removeBtn.addEventListener('click', () => row.remove());
+  removeBtn.addEventListener('click', () => {
+    row.remove();
+    if (type === 'loan') {
+      markRunDirty();
+      dissolveIncompleteLinkedGroups();
+      renderLinkedGroupSummary();
+      renderScenarioEngineRecommendation();
+    }
+  });
 
   if (type === 'loan') {
     const typeSelect = document.createElement('select');
@@ -1894,11 +1949,33 @@ function createInputRow(type, value = '', loanType = '', amount = '', isOnVacati
       syncLoanAmountInput(typeSelect, amountInput);
     });
 
+    row.dataset.linkedGroupId = '';
+    row.dataset.linkedGroupLabel = '';
+    row.dataset.linkedGroupReason = '';
+
+    const linkedBadge = document.createElement('div');
+    linkedBadge.className = 'loan-linked-group-badge';
+    linkedBadge.hidden = true;
+
+    const unlinkBtn = document.createElement('button');
+    unlinkBtn.type = 'button';
+    unlinkBtn.className = 'loan-linked-group-remove-btn';
+    unlinkBtn.textContent = 'Remove Group';
+    unlinkBtn.hidden = true;
+    unlinkBtn.addEventListener('click', () => {
+      clearLoanRowLinkedGroup(row);
+      renderLinkedGroupSummary();
+      renderScenarioEngineRecommendation();
+    });
+
     row.appendChild(input);
     row.appendChild(amountInput);
     row.appendChild(typeSelect);
+    row.appendChild(linkedBadge);
+    row.appendChild(unlinkBtn);
     row.appendChild(removeBtn);
     syncLoanAmountInput(typeSelect, amountInput);
+    applyLinkedGroupMetadataToLoanRow(row, loanMetadata);
     return row;
   }
 
@@ -1971,12 +2048,241 @@ function createInputRow(type, value = '', loanType = '', amount = '', isOnVacati
 
 function addOfficer(value = '', isOnVacation = false, officerConfig = {}) {
   officerList.appendChild(createInputRow('officer', value, '', '', isOnVacation, officerConfig));
+  markRunDirty();
   renderScenarioEngineRecommendation();
 }
 
-function addLoan(value = '', loanType = '', amount = '') {
-  loanList.appendChild(createInputRow('loan', value, loanType, amount));
+function addLoan(value = '', loanType = '', amount = '', loanMetadata = {}) {
+  loanList.appendChild(createInputRow('loan', value, loanType, amount, false, {}, loanMetadata));
+  markRunDirty();
+  renderLinkedGroupSummary();
   renderScenarioEngineRecommendation();
+}
+
+function generateLinkedGroupId() {
+  const existingIds = new Set(
+    [...loanList.querySelectorAll('.loan-row')]
+      .map((row) => String(row.dataset.linkedGroupId || '').trim())
+      .filter(Boolean)
+  );
+  let sequence = existingIds.size + 1;
+  let nextId = `MLG-${String(sequence).padStart(3, '0')}`;
+  while (existingIds.has(nextId)) {
+    sequence += 1;
+    nextId = `MLG-${String(sequence).padStart(3, '0')}`;
+  }
+  return nextId;
+}
+
+function getLinkedGroupMetadataFromRow(row) {
+  return {
+    linkedGroupId: String(row?.dataset.linkedGroupId || '').trim(),
+    linkedGroupLabel: String(row?.dataset.linkedGroupLabel || '').trim(),
+    linkedGroupReason: linkedLoanGroupService?.normalizeLinkedGroupReason?.(row?.dataset.linkedGroupReason) || 'Member relationship continuity'
+  };
+}
+
+function updateLoanRowLinkedGroupUi(row) {
+  const linkedBadge = row?.querySelector('.loan-linked-group-badge');
+  const unlinkBtn = row?.querySelector('.loan-linked-group-remove-btn');
+  if (!row || !linkedBadge || !unlinkBtn) {
+    return;
+  }
+
+  const { linkedGroupId, linkedGroupLabel, linkedGroupReason } = getLinkedGroupMetadataFromRow(row);
+  const hasLinkedGroup = Boolean(linkedGroupId);
+  linkedBadge.hidden = !hasLinkedGroup;
+  unlinkBtn.hidden = !hasLinkedGroup;
+  if (!hasLinkedGroup) {
+    linkedBadge.textContent = '';
+    return;
+  }
+  linkedBadge.textContent = `${linkedGroupLabel || linkedGroupId} • ${linkedGroupReason}`;
+}
+
+function applyLinkedGroupMetadataToLoanRow(row, metadata = {}) {
+  if (!row) {
+    return;
+  }
+  row.dataset.linkedGroupId = linkedLoanGroupService?.normalizeLinkedGroupId?.(metadata.linkedGroupId) || '';
+  row.dataset.linkedGroupLabel = linkedLoanGroupService?.normalizeLinkedGroupLabel?.(metadata.linkedGroupLabel, metadata.linkedGroupId) || '';
+  row.dataset.linkedGroupReason = linkedLoanGroupService?.normalizeLinkedGroupReason?.(metadata.linkedGroupReason) || 'Member relationship continuity';
+  updateLoanRowLinkedGroupUi(row);
+}
+
+function clearLoanRowLinkedGroup(row) {
+  applyLinkedGroupMetadataToLoanRow(row, {
+    linkedGroupId: '',
+    linkedGroupLabel: '',
+    linkedGroupReason: ''
+  });
+  dissolveIncompleteLinkedGroups();
+}
+
+function getCurrentLinkedLoanGroups() {
+  return linkedLoanGroupService?.buildLinkedLoanGroups?.(getLoanValues()) || [];
+}
+
+function dissolveIncompleteLinkedGroups() {
+  const groupedRows = new Map();
+  [...loanList.querySelectorAll('.loan-row')].forEach((row) => {
+    const linkedGroupId = String(row.dataset.linkedGroupId || '').trim();
+    if (!linkedGroupId) {
+      return;
+    }
+    const existingRows = groupedRows.get(linkedGroupId) || [];
+    existingRows.push(row);
+    groupedRows.set(linkedGroupId, existingRows);
+  });
+  groupedRows.forEach((rows) => {
+    if (rows.length >= 2) {
+      return;
+    }
+    rows.forEach((row) => applyLinkedGroupMetadataToLoanRow(row, {}));
+  });
+  markRunDirty();
+}
+
+function renderLinkedGroupSummary() {
+  if (!linkedGroupSummaryEl) {
+    return;
+  }
+  const groups = getCurrentLinkedLoanGroups();
+  if (!groups.length) {
+    linkedGroupSummaryEl.hidden = true;
+    linkedGroupSummaryEl.innerHTML = '';
+    return;
+  }
+
+  linkedGroupSummaryEl.hidden = false;
+  linkedGroupSummaryEl.innerHTML = `
+    <div class="linked-group-summary-header">
+      <strong>Linked Member Loan Groups</strong>
+      <span class="badge">${escapeHtml(String(groups.length))} active</span>
+    </div>
+  `;
+  groups.forEach((group) => {
+    const card = document.createElement('div');
+    card.className = 'linked-group-summary-card';
+    const loanLabels = group.loans.map((loan) => `${loan.name} (${loan.type})`).join(' • ');
+    card.innerHTML = `
+      <div class="linked-group-summary-copy">
+        <div><strong>${escapeHtml(group.linkedGroupLabel || group.linkedGroupId)}</strong> <span class="badge">${escapeHtml(group.linkedGroupId)}</span></div>
+        <div class="hint">${escapeHtml(group.linkedGroupReason || 'Member relationship continuity')}</div>
+        <div class="hint">${escapeHtml(loanLabels)}</div>
+      </div>
+      <button type="button" class="linked-group-delete-btn">Delete Group</button>
+    `;
+    card.querySelector('.linked-group-delete-btn')?.addEventListener('click', () => {
+      [...loanList.querySelectorAll('.loan-row')].forEach((row) => {
+        if (String(row.dataset.linkedGroupId || '').trim() === group.linkedGroupId) {
+          applyLinkedGroupMetadataToLoanRow(row, {});
+        }
+      });
+      renderLinkedGroupSummary();
+      markRunDirty();
+      renderScenarioEngineRecommendation();
+    });
+    linkedGroupSummaryEl.appendChild(card);
+  });
+}
+
+function renderLinkedLoanGroupModalMessage(text = '', tone = 'warning') {
+  if (!linkedLoanGroupModalMessageEl) {
+    return;
+  }
+  linkedLoanGroupModalMessageEl.textContent = text;
+  linkedLoanGroupModalMessageEl.dataset.tone = text ? tone : '';
+}
+
+function renderLinkedLoanGroupModalRows() {
+  if (!linkedLoanGroupLoanListEl) {
+    return;
+  }
+  const loans = getLoanValues();
+  linkedLoanGroupLoanListEl.innerHTML = '';
+  loans.forEach((loan, index) => {
+    const row = document.createElement('label');
+    row.className = 'linked-loan-group-loan-option';
+    row.innerHTML = `
+      <input type="checkbox" data-loan-index="${index}" />
+      <span><strong>${escapeHtml(loan.name)}</strong> <span class="type-badge">${escapeHtml(loan.type)}</span> ${escapeHtml(formatCurrency(loan.amountRequested || 0))}</span>
+      <span class="hint">${escapeHtml(loan.linkedGroupLabel || 'Not linked')}</span>
+    `;
+    linkedLoanGroupLoanListEl.appendChild(row);
+  });
+}
+
+function openLinkedLoanGroupModal() {
+  if (!linkedLoanGroupModalEl) {
+    return;
+  }
+  if (!canUseFeature(entitlements?.FEATURES?.LINKED_LOAN_GROUPS)) {
+    setStepMessage('step3', 'Linked loan groups require Pro or Platinum.', 'warning');
+    return;
+  }
+  renderLinkedLoanGroupModalRows();
+  linkedLoanGroupLabelInput.value = '';
+  linkedLoanGroupReasonInput.value = linkedLoanGroupService?.DEFAULT_REASON || 'Member relationship continuity';
+  renderLinkedLoanGroupModalMessage('');
+  linkedLoanGroupModalEl.hidden = false;
+}
+
+function closeLinkedLoanGroupModal() {
+  if (!linkedLoanGroupModalEl) {
+    return;
+  }
+  linkedLoanGroupModalEl.hidden = true;
+}
+
+function getSelectedLinkedLoanGroupModalIndexes() {
+  return [...linkedLoanGroupLoanListEl.querySelectorAll('input[type="checkbox"]:checked')]
+    .map((input) => Number(input.dataset.loanIndex))
+    .filter((index) => Number.isInteger(index) && index >= 0);
+}
+
+function saveLinkedLoanGroupFromModal() {
+  const selectedIndexes = getSelectedLinkedLoanGroupModalIndexes();
+  if (selectedIndexes.length < 2) {
+    renderLinkedLoanGroupModalMessage('Select at least two loans to create a linked member loan group.', 'warning');
+    return;
+  }
+  const groupLabel = String(linkedLoanGroupLabelInput?.value || '').trim();
+  if (!groupLabel) {
+    renderLinkedLoanGroupModalMessage('Enter a group label before saving.', 'warning');
+    return;
+  }
+  const rows = [...loanList.querySelectorAll('.loan-row')];
+  const linkedGroupId = generateLinkedGroupId();
+  const linkedGroupReason = linkedLoanGroupService?.normalizeLinkedGroupReason?.(linkedLoanGroupReasonInput?.value) || 'Member relationship continuity';
+  selectedIndexes.forEach((index) => {
+    applyLinkedGroupMetadataToLoanRow(rows[index], {
+      linkedGroupId,
+      linkedGroupLabel: groupLabel,
+      linkedGroupReason
+    });
+  });
+  markRunDirty();
+  dissolveIncompleteLinkedGroups();
+  renderLinkedGroupSummary();
+  renderScenarioEngineRecommendation();
+  closeLinkedLoanGroupModal();
+  setStepMessage('step3', `Created linked member loan group ${groupLabel}.`, 'success');
+}
+
+function removeSelectedLoansFromLinkedGroup() {
+  const selectedIndexes = getSelectedLinkedLoanGroupModalIndexes();
+  if (!selectedIndexes.length) {
+    renderLinkedLoanGroupModalMessage('Select at least one linked loan to remove from its group.', 'warning');
+    return;
+  }
+  const rows = [...loanList.querySelectorAll('.loan-row')];
+  selectedIndexes.forEach((index) => clearLoanRowLinkedGroup(rows[index]));
+  markRunDirty();
+  renderLinkedGroupSummary();
+  renderScenarioEngineRecommendation();
+  closeLinkedLoanGroupModal();
+  setStepMessage('step3', 'Removed the selected loans from their linked group.', 'success');
 }
 
 function loadDemoLoansIntoForm() {
@@ -1989,6 +2295,7 @@ function loadDemoLoansIntoForm() {
     const preferredType = activeTypes.includes(loan.type) ? loan.type : fallbackType;
     addLoan(loan.name, preferredType, loan.amount);
   });
+  renderLinkedGroupSummary();
 }
 
 function removeLoansWithType(typeName) {
@@ -2002,6 +2309,8 @@ function removeLoansWithType(typeName) {
     }
   });
 
+  dissolveIncompleteLinkedGroups();
+  renderLinkedGroupSummary();
   return removedCount;
 }
 
@@ -2037,7 +2346,8 @@ function getLoanValues() {
           ? 0
           : amountValue === ''
             ? null
-            : Number(amountValue)
+            : Number(amountValue),
+        ...getLinkedGroupMetadataFromRow(row)
       };
     })
     .filter((loan) => loan.name);
@@ -2084,6 +2394,18 @@ function getLoanRowValidationError() {
     }
   }
 
+  const linkedGroupValidation = linkedLoanGroupService?.validateLinkedLoanGroups?.({
+    loans: getLoanValues(),
+    officers: getOfficerValues(),
+    canUseLinkedLoanGroups: canUseFeature(entitlements?.FEATURES?.LINKED_LOAN_GROUPS),
+    getLockedFeatureMessage: () => 'Linked loan groups require Pro or Platinum.',
+    getLoanCategory: (loan) => getLoanCategoryForType(loan.type),
+    isOfficerEligibleForLoan: (officer, loan) => isOfficerEligibleForLoanType(officer, loan)
+  });
+  if (linkedGroupValidation && !linkedGroupValidation.valid) {
+    return linkedGroupValidation.message;
+  }
+
   return '';
 }
 
@@ -2110,6 +2432,19 @@ function setMessage(text = '', tone = 'warning') {
   });
   messageEl.textContent = text;
   messageEl.dataset.tone = text ? tone : '';
+}
+
+function markRunDirty() {
+  currentRunFinalized = false;
+  if (!isAssignmentCommitInProgress) {
+    updateFolderStatus();
+  }
+}
+
+function setAssignmentCommitState({ committing = false, finalized = currentRunFinalized } = {}) {
+  isAssignmentCommitInProgress = Boolean(committing);
+  currentRunFinalized = Boolean(finalized);
+  updateFolderStatus();
 }
 
 function getLicenseGuardMessage(actionName) {
@@ -2181,7 +2516,7 @@ function syncLicenseStatusUi() {
 
   const lockedMessage = getLicenseGuardMessage('ui');
   const shouldLock = Boolean(lockedMessage);
-  [addOfficerBtn, addLoanBtn, importPriorMonthBtn, importLoansBtn, randomizeBtn, addLoanTypeBtn, endOfMonthBtn, launchDemoModeBtn, quickLaunchDemoModeBtn]
+  [addOfficerBtn, addLoanBtn, importPriorMonthBtn, importLoansBtn, linkLoansBtn, randomizeBtn, addLoanTypeBtn, endOfMonthBtn, launchDemoModeBtn, quickLaunchDemoModeBtn]
     .forEach((button) => {
       if (!button) {
         return;
@@ -2260,6 +2595,27 @@ function updateFolderStatus() {
     if (importLoansBtn) {
       importLoansBtn.disabled = isLocked;
     }
+    if (linkLoansBtn) {
+      linkLoansBtn.disabled = isLocked;
+    }
+  }
+
+  function syncRunButtonState(licenseLocked) {
+    if (!randomizeBtn) {
+      return;
+    }
+    const shouldLock = Boolean(licenseLocked) || isAssignmentCommitInProgress || currentRunFinalized;
+    randomizeBtn.disabled = shouldLock;
+    randomizeBtn.dataset.state = shouldLock ? 'locked' : 'ready';
+    if (isAssignmentCommitInProgress) {
+      randomizeBtn.title = 'This assignment is being saved now.';
+    } else if (currentRunFinalized) {
+      randomizeBtn.title = 'This run has already been completed. Change loans, officers, or reset the screen before running again.';
+    } else if (licenseLocked) {
+      randomizeBtn.title = getLicenseGuardMessage('ui');
+    } else {
+      randomizeBtn.removeAttribute('title');
+    }
   }
 
   if (outputDirectoryHandle) {
@@ -2283,8 +2639,7 @@ function updateFolderStatus() {
       clearDemoDataBtn.hidden = !showDemoControls || !isDemoMode;
       clearDemoDataBtn.disabled = !showDemoControls;
     }
-    randomizeBtn.disabled = licenseLocked;
-    randomizeBtn.dataset.state = licenseLocked ? 'locked' : 'ready';
+    syncRunButtonState(licenseLocked);
     setStep3LockedState(licenseLocked);
     return;
   }
@@ -2295,8 +2650,7 @@ function updateFolderStatus() {
     outputStepEl.dataset.state = 'error';
     outputStepCompactEl.hidden = true;
     outputStepDetailsEl.hidden = false;
-    randomizeBtn.disabled = true;
-    randomizeBtn.dataset.state = 'locked';
+    syncRunButtonState(true);
     setStep3LockedState(true);
     return;
   }
@@ -2315,8 +2669,7 @@ function updateFolderStatus() {
   if (clearDemoDataBtn) {
     clearDemoDataBtn.hidden = true;
   }
-  randomizeBtn.disabled = true;
-  randomizeBtn.dataset.state = 'locked';
+  syncRunButtonState(true);
   setStep3LockedState(true);
 }
 
@@ -3529,7 +3882,14 @@ function normalizeLoanHistoryEntry(entry) {
     type: isKnownLoanType(entry.type) ? entry.type : getAllLoanTypeNames()[0],
     amountRequested: Number.isFinite(entry.amountRequested) && entry.amountRequested >= 0 ? entry.amountRequested : 0,
     assignedOfficer: String(entry.assignedOfficer ?? '').trim(),
-    generatedAt: String(entry.generatedAt ?? '').trim()
+    generatedAt: String(entry.generatedAt ?? '').trim(),
+    linkedGroupId: String(entry.linkedGroupId ?? '').trim(),
+    linkedGroupLabel: String(entry.linkedGroupLabel ?? '').trim(),
+    linkedGroupReason: String(entry.linkedGroupReason ?? '').trim(),
+    linkedGroupExceptionAcknowledged: String(entry.linkedGroupExceptionAcknowledged ?? '').trim().toLowerCase() === 'true' || entry.linkedGroupExceptionAcknowledged === true,
+    approvedBy: String(entry.approvedBy ?? '').trim(),
+    approvedAt: String(entry.approvedAt ?? '').trim(),
+    approvalReason: String(entry.approvalReason ?? '').trim()
   };
 }
 
@@ -3707,6 +4067,20 @@ function getLoanImportMappingFromUi() {
   };
 }
 
+const LINKED_LOAN_GROUP_IMPORT_ALIASES = Object.freeze({
+  linkedGroupId: ['linkedgroupid', 'linked_group_id', 'linked group id', 'membergroup', 'member group'],
+  linkedGroupLabel: ['linkedgrouplabel', 'linked_group_label', 'linked group label', 'linkedgroupname', 'membergrouplabel', 'member group label'],
+  linkedGroupReason: ['linkedgroupreason', 'linked_group_reason', 'linked group reason'],
+  memberId: ['memberid', 'member_id', 'member id']
+});
+
+function getImportedLinkedGroupColumn(headers = [], fieldName) {
+  const normalizedHeaders = new Map(headers.map((header) => [String(header || '').trim().toLowerCase(), header]));
+  const aliases = LINKED_LOAN_GROUP_IMPORT_ALIASES[fieldName] || [];
+  const matchedAlias = aliases.find((alias) => normalizedHeaders.has(alias));
+  return matchedAlias ? normalizedHeaders.get(matchedAlias) : '';
+}
+
 function renderLoanImportMessage(text = '', tone = 'warning') {
   if (!loanImportMessageEl) {
     return;
@@ -3786,8 +4160,10 @@ function renderLoanImportPreview(preview) {
       <li>Skipped duplicates: ${preview.skippedDuplicates.length}</li>
       <li>Skipped incomplete or invalid rows: ${preview.skippedInvalid.length}</li>
       <li>New loan types to add: ${preview.newLoanTypes.length ? escapeHtml(preview.newLoanTypes.join(', ')) : 'None'}</li>
+      <li>Linked loan groups detected: ${preview.linkedGroups.length}</li>
       <li>Column mapping: ${escapeHtml(mappingSummary.join(' • '))}</li>
     </ul>
+    ${preview.linkedGroups.length ? `<p class="hint">This import contains linked loan groups. Linked loans will be assigned to the same officer.</p>` : ''}
   `;
 }
 
@@ -3799,6 +4175,10 @@ async function buildLoanImportPreview(rows, mapping, fileName) {
 
   const historyLoanNames = new Set(Object.keys(loanHistory.loans || {}));
   const knownTypeByLower = new Map(allLoanTypes.map((loanType) => [loanType.name.toLowerCase(), loanType]));
+  const headers = rows.map((row) => Object.keys(row.raw || {})).flat();
+  const linkedGroupIdColumn = getImportedLinkedGroupColumn(headers, 'linkedGroupId');
+  const linkedGroupLabelColumn = getImportedLinkedGroupColumn(headers, 'linkedGroupLabel');
+  const linkedGroupReasonColumn = getImportedLinkedGroupColumn(headers, 'linkedGroupReason');
   const readyRows = [];
   const skippedDuplicates = [];
   const skippedInvalid = [];
@@ -3810,6 +4190,9 @@ async function buildLoanImportPreview(rows, mapping, fileName) {
     const loanId = String(row.raw[mapping.loanId] || '').trim();
     const loanTypeRaw = String(row.raw[mapping.loanType] || '').trim();
     const amountRaw = mapping.amountRequested ? row.raw[mapping.amountRequested] : '';
+    const importedLinkedGroupId = linkedGroupIdColumn ? String(row.raw[linkedGroupIdColumn] || '').trim() : '';
+    const importedLinkedGroupLabel = linkedGroupLabelColumn ? String(row.raw[linkedGroupLabelColumn] || '').trim() : '';
+    const importedLinkedGroupReason = linkedGroupReasonColumn ? String(row.raw[linkedGroupReasonColumn] || '').trim() : '';
 
     if (!loanId || !loanTypeRaw) {
       skippedInvalid.push({ rowNumber: row.rowNumber, reason: 'Missing Loan App Number / ID or Loan Type.' });
@@ -3829,7 +4212,14 @@ async function buildLoanImportPreview(rows, mapping, fileName) {
 
     const parsedAmount = parseImportAmount(amountRaw);
     if (isOptionalAmount && (amountRaw === undefined || String(amountRaw).trim() === '')) {
-      readyRows.push({ name: loanId, type: resolvedLoanType, amountRequested: 0 });
+      readyRows.push({
+        name: loanId,
+        type: resolvedLoanType,
+        amountRequested: 0,
+        linkedGroupId: importedLinkedGroupId,
+        linkedGroupLabel: importedLinkedGroupLabel,
+        linkedGroupReason: importedLinkedGroupReason
+      });
       importSeenLoanIds.add(normalizedLoanId);
     } else if (parsedAmount === null && !isOptionalAmount) {
       skippedInvalid.push({ rowNumber: row.rowNumber, reason: `Loan ${loanId} is missing Amount Requested.` });
@@ -3838,7 +4228,14 @@ async function buildLoanImportPreview(rows, mapping, fileName) {
       skippedInvalid.push({ rowNumber: row.rowNumber, reason: `Loan ${loanId} has an invalid Amount Requested.` });
       return;
     } else {
-      readyRows.push({ name: loanId, type: resolvedLoanType, amountRequested: isOptionalAmount ? 0 : parsedAmount });
+      readyRows.push({
+        name: loanId,
+        type: resolvedLoanType,
+        amountRequested: isOptionalAmount ? 0 : parsedAmount,
+        linkedGroupId: importedLinkedGroupId,
+        linkedGroupLabel: importedLinkedGroupLabel,
+        linkedGroupReason: importedLinkedGroupReason
+      });
       importSeenLoanIds.add(normalizedLoanId);
     }
 
@@ -3854,6 +4251,7 @@ async function buildLoanImportPreview(rows, mapping, fileName) {
     mapping,
     totalRows: rows.length,
     readyRows,
+    linkedGroups: linkedLoanGroupService?.buildLinkedLoanGroups?.(readyRows) || [],
     skippedDuplicates,
     skippedInvalid,
     newLoanTypes
@@ -3901,7 +4299,11 @@ async function ensureImportedLoanTypesExist(importedRows) {
 
 function applyImportedLoansToForm(importRows) {
   importRows.forEach((row) => {
-    addLoan(row.name, row.type, String(row.amountRequested));
+    addLoan(row.name, row.type, String(row.amountRequested), {
+      linkedGroupId: row.linkedGroupId,
+      linkedGroupLabel: row.linkedGroupLabel,
+      linkedGroupReason: row.linkedGroupReason
+    });
   });
 }
 
@@ -4044,7 +4446,7 @@ async function handleLoanImportFileChange(event) {
 
 function buildLoanHistoryCsv(loanHistory) {
   const rows = [
-    'loan_name,type,amount_requested,assigned_officer,generated_at'
+    'loan_name,type,amount_requested,assigned_officer,generated_at,linked_group_id,linked_group_label,linked_group_reason,linked_group_exception_acknowledged,approved_by,approved_at,approval_reason'
   ];
 
   Object.entries(loanHistory.loans || {})
@@ -4061,7 +4463,14 @@ function buildLoanHistoryCsv(loanHistory) {
         normalizedEntry.type,
         normalizedEntry.amountRequested,
         normalizedEntry.assignedOfficer,
-        normalizedEntry.generatedAt
+        normalizedEntry.generatedAt,
+        normalizedEntry.linkedGroupId || '',
+        normalizedEntry.linkedGroupLabel || '',
+        normalizedEntry.linkedGroupReason || '',
+        normalizedEntry.linkedGroupExceptionAcknowledged ? 'true' : 'false',
+        normalizedEntry.approvedBy || '',
+        normalizedEntry.approvedAt || '',
+        normalizedEntry.approvalReason || ''
       ].map(escapeCsvValue).join(','));
     });
 
@@ -4093,7 +4502,14 @@ function parseLoanHistoryCsv(csvText) {
       type: row.type,
       amountRequested: Number(row.amount_requested),
       assignedOfficer: row.assigned_officer,
-      generatedAt: row.generated_at
+      generatedAt: row.generated_at,
+      linkedGroupId: row.linked_group_id,
+      linkedGroupLabel: row.linked_group_label,
+      linkedGroupReason: row.linked_group_reason,
+      linkedGroupExceptionAcknowledged: row.linked_group_exception_acknowledged,
+      approvedBy: row.approved_by,
+      approvedAt: row.approved_at,
+      approvalReason: row.approval_reason
     });
 
     if (entry) {
@@ -4477,6 +4893,7 @@ function buildUpdatedRunningTotals(cleanOfficers, result, priorRunningTotals) {
 
 function buildUpdatedLoanHistory(result, generatedAt, priorLoanHistory) {
   const updatedLoans = { ...(priorLoanHistory.loans || {}) };
+  const fairnessReview = result?.fairnessReview || {};
 
   result.loanAssignments.forEach((entry) => {
     updatedLoans[entry.loan.name.toLowerCase()] = normalizeLoanHistoryEntry({
@@ -4484,7 +4901,18 @@ function buildUpdatedLoanHistory(result, generatedAt, priorLoanHistory) {
       type: entry.loan.type,
       amountRequested: entry.loan.amountRequested,
       assignedOfficer: entry.officers[0] || '',
-      generatedAt: generatedAt.toISOString()
+      generatedAt: generatedAt.toISOString(),
+      linkedGroupId: entry.loan.linkedGroupId || '',
+      linkedGroupLabel: entry.loan.linkedGroupLabel || '',
+      linkedGroupReason: entry.loan.linkedGroupId
+        ? (linkedLoanGroupService?.normalizeLinkedGroupReason?.(entry.loan.linkedGroupReason || '')
+          || linkedLoanGroupService?.DEFAULT_REASON
+          || 'Member relationship continuity')
+        : '',
+      linkedGroupExceptionAcknowledged: Boolean(fairnessReview.linkedGroupExceptionAcknowledged && entry.loan.linkedGroupId),
+      approvedBy: entry.loan.linkedGroupId ? (fairnessReview.approvedBy || '') : '',
+      approvedAt: entry.loan.linkedGroupId ? (fairnessReview.approvedAt || '') : '',
+      approvalReason: entry.loan.linkedGroupId ? (fairnessReview.approvalReason || '') : ''
     });
   });
 
@@ -4492,14 +4920,22 @@ function buildUpdatedLoanHistory(result, generatedAt, priorLoanHistory) {
 }
 
 async function commitAssignmentResult(result, officers, loans, runningTotals, loanHistory, statusMessage) {
+  setAssignmentCommitState({ committing: true, finalized: false });
   const generatedAt = new Date();
-  const updatedRunningTotals = buildUpdatedRunningTotals(officers, result, runningTotals);
-  result.updatedRunningTotals = buildRunningTotalsWithCurrentOfficerStatuses(updatedRunningTotals);
-  const fileName = await saveResultPdf(result, officers, loans, generatedAt);
-  await saveRunningTotals(result.updatedRunningTotals);
-  await saveLoanHistory(buildUpdatedLoanHistory(result, generatedAt, loanHistory));
-  setMessage(`${statusMessage} Saved to ${fileName}. Officer history was updated in ${getSessionFileName('runningTotals')}, and loan history was updated in ${getSessionFileName('loanHistory')}.`, 'success');
-  return fileName;
+
+  try {
+    const updatedRunningTotals = buildUpdatedRunningTotals(officers, result, runningTotals);
+    result.updatedRunningTotals = buildRunningTotalsWithCurrentOfficerStatuses(updatedRunningTotals);
+    const fileName = await saveResultPdf(result, officers, loans, generatedAt);
+    await saveRunningTotals(result.updatedRunningTotals);
+    await saveLoanHistory(buildUpdatedLoanHistory(result, generatedAt, loanHistory));
+    setAssignmentCommitState({ committing: false, finalized: true });
+    setMessage(`${statusMessage} Saved to ${fileName}. Officer history was updated in ${getSessionFileName('runningTotals')}, and loan history was updated in ${getSessionFileName('loanHistory')}.`, 'success');
+    return fileName;
+  } catch (error) {
+    setAssignmentCommitState({ committing: false, finalized: false });
+    throw error;
+  }
 }
 
 function getPendingReviewReason() {
@@ -4549,6 +4985,31 @@ function closeFairnessReviewModal() {
   }
 }
 
+function renderFairnessReviewModalMessage(text = '', tone = 'warning') {
+  const messageEl = document.getElementById('fairnessReviewModalMessage');
+  if (!messageEl) {
+    return;
+  }
+  messageEl.textContent = text;
+  messageEl.dataset.tone = text ? tone : '';
+}
+
+function syncFairnessReviewApprovalState() {
+  if (!approveFairnessReviewBtn || !pendingReviewAssignment) {
+    return;
+  }
+
+  const requiresLinkedGroupApproval = linkedLoanGroupService?.requiresLinkedGroupReviewApproval?.(pendingReviewAssignment.result);
+  if (!requiresLinkedGroupApproval) {
+    approveFairnessReviewBtn.disabled = false;
+    return;
+  }
+
+  const managerNameInput = document.getElementById('fairnessReviewManagerNameInput');
+  const approvalNameValidation = linkedLoanGroupService?.validateManagerApprovalName?.(managerNameInput?.value || '');
+  approveFairnessReviewBtn.disabled = !approvalNameValidation?.valid;
+}
+
 function openFairnessReviewModal() {
   if (!pendingReviewAssignment || !fairnessReviewModalEl || !fairnessReviewModalBodyEl) {
     return;
@@ -4556,9 +5017,12 @@ function openFairnessReviewModal() {
 
   const review = pendingReviewAssignment.result.fairnessReview || {};
   const contextNotes = buildReviewContextNotes(pendingReviewAssignment.result.fairnessEvaluation);
+  const requiresLinkedGroupApproval = linkedLoanGroupService?.requiresLinkedGroupReviewApproval?.(pendingReviewAssignment.result);
   fairnessReviewModalBodyEl.innerHTML = `
+    <div id="fairnessReviewModalMessage" class="message"></div>
     <p>This assignment requires review. LendingFair tested additional assignment attempts and selected the best available result, but the fairness status remains REVIEW.</p>
     <p>Review the assignment split on screen. Approve assignment will save history, update running totals, and generate the final report. Deny will discard this pending assignment without saving.</p>
+    ${requiresLinkedGroupApproval ? '<p>This assignment includes linked member loan groups. Approving this REVIEW assignment confirms that the linked loans were intentionally assigned together for member service continuity, even though this may skew fairness distribution.</p>' : ''}
     <ul>
       <li>Final selected status: <strong>${escapeHtml(String(review.selectedStatus || 'REVIEW'))}</strong></li>
       <li>Attempts evaluated: <strong>${escapeHtml(String(review.attemptsEvaluated || 1))}</strong></li>
@@ -4567,12 +5031,34 @@ function openFairnessReviewModal() {
       <li>${escapeHtml(getPendingReviewReason())}</li>
     </ul>
     ${contextNotes.length ? `<p>${escapeHtml(contextNotes.join(' '))}</p>` : ''}
+    ${requiresLinkedGroupApproval ? `
+      <label class="modal-inline-label">
+        <span>Approver first and last name</span>
+        <input id="fairnessReviewManagerNameInput" type="text" placeholder="Jane Smith" />
+      </label>
+      <label class="modal-inline-label">
+        <span>Approval reason</span>
+        <input id="fairnessReviewApprovalReasonInput" type="text" value="${escapeHtml(linkedLoanGroupService?.DEFAULT_REASON || 'Member relationship continuity')}" />
+      </label>
+    ` : ''}
   `;
+  renderFairnessReviewModalMessage('');
+  if (requiresLinkedGroupApproval) {
+    const managerNameInput = document.getElementById('fairnessReviewManagerNameInput');
+    managerNameInput?.addEventListener('input', () => {
+      renderFairnessReviewModalMessage('');
+      syncFairnessReviewApprovalState();
+    });
+    syncFairnessReviewApprovalState();
+  } else {
+    approveFairnessReviewBtn.disabled = false;
+  }
   fairnessReviewModalEl.hidden = false;
 }
 
 function denyPendingReviewAssignment() {
   pendingReviewAssignment = null;
+  approveFairnessReviewBtn.disabled = false;
   closeFairnessReviewModal();
   setMessage('Fairness Review assignment denied. No history, running totals, or report files were saved.', 'success');
 }
@@ -4588,13 +5074,34 @@ async function approvePendingReviewAssignment() {
   }
 
   const { result, officers, loans, runningTotals, loanHistory } = pendingReviewAssignment;
+  if (linkedLoanGroupService?.requiresLinkedGroupReviewApproval?.(result)) {
+    const managerNameInput = document.getElementById('fairnessReviewManagerNameInput');
+    const approvalReasonInput = document.getElementById('fairnessReviewApprovalReasonInput');
+    const approvalNameValidation = linkedLoanGroupService?.validateManagerApprovalName?.(managerNameInput?.value || '');
+    if (!approvalNameValidation?.valid) {
+      renderFairnessReviewModalMessage(approvalNameValidation?.message || 'Enter the approver first and last name.', 'warning');
+      managerNameInput?.focus();
+      return;
+    }
+    renderFairnessReviewModalMessage('');
+    result.fairnessReview.approvedBy = approvalNameValidation.normalizedName;
+    result.fairnessReview.approvedAt = new Date().toISOString();
+    result.fairnessReview.approvalReason = linkedLoanGroupService?.normalizeLinkedGroupReason?.(approvalReasonInput?.value || '') || 'Member relationship continuity';
+    result.fairnessReview.linkedGroupExceptionAcknowledged = true;
+  }
   result.fairnessReview.managerConfirmed = true;
+  pendingReviewAssignment = null;
+  closeFairnessReviewModal();
+  approveFairnessReviewBtn.disabled = true;
 
   try {
     await commitAssignmentResult(result, officers, loans, runningTotals, loanHistory, 'Manager confirmed REVIEW assignment.');
-    pendingReviewAssignment = null;
-    closeFairnessReviewModal();
+    approveFairnessReviewBtn.disabled = false;
   } catch (error) {
+    pendingReviewAssignment = { result, officers, loans, runningTotals, loanHistory };
+    openFairnessReviewModal();
+    renderFairnessReviewModalMessage(`Assignments were generated, but the files could not be fully saved: ${error.message}`, 'warning');
+    syncFairnessReviewApprovalState();
     setMessage(`Assignments were generated, but the files could not be fully saved: ${error.message}`, 'warning');
   }
 }
@@ -4745,9 +5252,14 @@ async function archiveRunningTotalsForEndOfMonth() {
 function resetToInitialScreen() {
   outputDirectoryHandle = null;
   isDemoMode = false;
+  pendingReviewAssignment = null;
+  latestAssignmentResult = null;
+  isAssignmentCommitInProgress = false;
+  currentRunFinalized = false;
   allLoanTypes = [...DEFAULT_LOAN_TYPES];
   officerList.innerHTML = '';
   loanList.innerHTML = '';
+  renderLinkedGroupSummary();
   loanAssignmentsEl.className = 'results empty';
   officerAssignmentsEl.className = 'results empty';
   fairnessAuditEl.className = 'results empty';
@@ -5164,6 +5676,132 @@ function selectOfficerWithGlobalDominationGuard(scoredOfficers, runAssignmentCou
   return { officer: baselineChoice, guardApplied: false };
 }
 
+function getAssignmentUnitCategory(unit) {
+  const categories = new Set(unit?.loanCategories || []);
+  if (categories.size > 1) {
+    return 'mixed';
+  }
+  return [...categories][0] || loanCategoryUtils.LOAN_CATEGORIES.CONSUMER;
+}
+
+function getAssignmentUnitLoanTypeCounts(unit) {
+  return (unit?.loans || []).reduce((counts, loan) => {
+    const loanType = String(loan?.type || '').trim();
+    if (!loanType) {
+      return counts;
+    }
+    counts[loanType] = (counts[loanType] || 0) + 1;
+    return counts;
+  }, {});
+}
+
+function chooseOfficerForAssignmentUnit(officersByName, officerLoanTotals, officerTypeCounts, officerAmountTotals, officerActiveSessions, runAssignmentCounts, runTypeAssignmentCounts, routingContext, unit) {
+  if (!unit || unit.unitType !== 'linked_group') {
+    return chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCounts, officerAmountTotals, officerActiveSessions, runAssignmentCounts, runTypeAssignmentCounts, routingContext, unit?.loans?.[0] || unit);
+  }
+
+  const unitCategory = getAssignmentUnitCategory(unit);
+  const unitLoanTypeCounts = getAssignmentUnitLoanTypeCounts(unit);
+  let eligibleOfficers = Object.values(officersByName)
+    .filter((officerConfig) => !officerConfig?.isOnVacation)
+    .filter((officerConfig) => unit.loans.every((loan) => isOfficerEligibleForLoanType(officerConfig, loan)));
+
+  if (unitCategory === loanCategoryUtils.LOAN_CATEGORIES.CONSUMER || unitCategory === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE) {
+    eligibleOfficers = filterEligibleOfficersByFocusWeight(eligibleOfficers, unitCategory);
+  }
+
+  if (!eligibleOfficers.length) {
+    return {
+      error: `No eligible officers are configured for linked group ${unit.linkedGroupLabel || unit.linkedGroupId}.`,
+      loanCategory: unitCategory,
+      scoredOfficers: []
+    };
+  }
+
+  const eligibleOfficerNames = eligibleOfficers.map((officer) => officer.name);
+  const shuffledOfficers = shuffle(eligibleOfficerNames);
+  const unitLoanCount = unit.loans.length;
+  const categoryCountAdditions = {
+    consumer: unit.loans.filter((loan) => getLoanCategoryForType(loan.type) === loanCategoryUtils.LOAN_CATEGORIES.CONSUMER).length,
+    mortgage: unit.loans.filter((loan) => getLoanCategoryForType(loan.type) === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE).length
+  };
+  const categoryAmountAdditions = {
+    consumer: unit.loans
+      .filter((loan) => getLoanCategoryForType(loan.type) === loanCategoryUtils.LOAN_CATEGORIES.CONSUMER)
+      .reduce((sum, loan) => sum + getGoalAmountForLoan(loan), 0),
+    mortgage: unit.loans
+      .filter((loan) => getLoanCategoryForType(loan.type) === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE)
+      .reduce((sum, loan) => sum + getGoalAmountForLoan(loan), 0)
+  };
+
+  const scoredOfficers = shuffledOfficers.map((officer) => {
+    let typeVarianceTotal = 0;
+    let typeVarianceCount = 0;
+    Object.entries(unitLoanTypeCounts).forEach(([loanType, count]) => {
+      const currentTypeTotals = Object.fromEntries(
+        eligibleOfficerNames.map((currentOfficer) => [currentOfficer, officerTypeCounts[currentOfficer][loanType] || 0])
+      );
+      const projectedTypeLoads = buildProjectedLoads(eligibleOfficerNames, currentTypeTotals, officerActiveSessions, officer, count);
+      typeVarianceTotal += calculateVariance(projectedTypeLoads);
+      typeVarianceCount += 1;
+    });
+
+    const projectedLoanLoads = buildProjectedLoads(
+      eligibleOfficerNames,
+      Object.fromEntries(eligibleOfficerNames.map((officerName) => [officerName, officerLoanTotals[officerName] || 0])),
+      officerActiveSessions,
+      officer,
+      unitLoanCount
+    );
+    const amountVariances = [];
+    if (categoryCountAdditions.consumer > 0) {
+      const consumerAmountTotals = Object.fromEntries(
+        eligibleOfficerNames.map((officerName) => [officerName, getEstimatedCategoryAmountTotal(officerTypeCounts[officerName], officerAmountTotals[officerName], loanCategoryUtils.LOAN_CATEGORIES.CONSUMER)])
+      );
+      amountVariances.push(calculateVariance(
+        eligibleOfficerNames.map((officerName) => getNormalizedAmountFairnessValue(
+          consumerAmountTotals[officerName] + (officerName === officer ? categoryAmountAdditions.consumer : 0),
+          officerActiveSessions[officerName]
+        ))
+      ));
+    }
+    if (categoryCountAdditions.mortgage > 0) {
+      const mortgageAmountTotals = Object.fromEntries(
+        eligibleOfficerNames.map((officerName) => [officerName, getEstimatedCategoryAmountTotal(officerTypeCounts[officerName], officerAmountTotals[officerName], loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE)])
+      );
+      amountVariances.push(calculateVariance(
+        eligibleOfficerNames.map((officerName) => getNormalizedAmountFairnessValue(
+          mortgageAmountTotals[officerName] + (officerName === officer ? categoryAmountAdditions.mortgage : 0),
+          officerActiveSessions[officerName]
+        ))
+      ));
+    }
+    const typeVariance = typeVarianceCount ? (typeVarianceTotal / typeVarianceCount) : 0;
+    const amountVariance = amountVariances.length ? (amountVariances.reduce((sum, value) => sum + value, 0) / amountVariances.length) : 0;
+    const loanVariance = calculateVariance(projectedLoanLoads);
+    const score = (typeVariance * 4) + (amountVariance * 4) + loanVariance;
+
+    return {
+      officer,
+      score,
+      fairnessScore: score,
+      loanCategory: unitCategory,
+      typeVariance,
+      amountVariance,
+      loanVariance,
+      projectedTypeLoad: getNormalizedFairnessValue((officerLoanTotals[officer] || 0) + unitLoanCount, officerActiveSessions[officer]),
+      projectedAmountLoad: getNormalizedFairnessValue((officerAmountTotals[officer] || 0) + unit.totalAmount, officerActiveSessions[officer]),
+      projectedLoanLoad: getNormalizedFairnessValue((officerLoanTotals[officer] || 0) + unitLoanCount, officerActiveSessions[officer])
+    };
+  });
+
+  scoredOfficers.sort((officerA, officerB) => officerA.score - officerB.score);
+  return {
+    selectedOfficer: scoredOfficers[0]?.officer || '',
+    scoredOfficers
+  };
+}
+
 function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCounts, officerAmountTotals, officerActiveSessions, runAssignmentCounts, runTypeAssignmentCounts, routingContext, loan) {
   const loanCategory = getLoanCategoryForType(loan.type);
   let eligibleOfficers = Object.values(officersByName)
@@ -5462,6 +6100,10 @@ function getAuditStatusLabel(entry, scoredOfficer, index) {
 
 function buildPdfLines(result, officers, loans, generatedAt) {
   const generatedAtLabel = formatDisplayTimestamp(generatedAt);
+  const pdfFairnessEvaluation = applyOptimizationSummaryToFairnessEvaluation(
+    result,
+    result.fairnessEvaluation || evaluateResultFairness(result)
+  );
   const releaseMetadataLines = window.LendingFairAppMetadata?.buildReportMetadataLines?.({
     generatedAtLabel,
     fairnessEngineLabel: getSelectedFairnessEngineLabel()
@@ -5498,13 +6140,9 @@ function buildPdfLines(result, officers, loans, generatedAt) {
   });
 
   if (canUseFeature(entitlements?.FEATURES?.FAIRNESS_AUDIT_REPORT)) {
-    const fairnessEvaluation = applyOptimizationSummaryToFairnessEvaluation(
-      result,
-      result.fairnessEvaluation || evaluateResultFairness(result)
-    );
     lines.push({ text: 'Fairness Audit', size: 14, gapAfter: 10 });
     lines.push({ text: `Fairness model: ${getSelectedFairnessEngineLabel()}`, size: 11, gapAfter: 4 });
-    lines.push({ text: `Overall fairness status: ${fairnessEvaluation.overallResult}`, size: 11, gapAfter: 4 });
+    lines.push({ text: `Overall fairness status: ${pdfFairnessEvaluation.overallResult}`, size: 11, gapAfter: 4 });
     if (result.fairnessReview?.attemptsEvaluated > 1) {
       lines.push({ text: 'Fairness Review Workflow: Additional assignment attempts were evaluated.', size: 11, gapAfter: 4 });
       lines.push({ text: `Attempts evaluated: ${result.fairnessReview.attemptsEvaluated}`, size: 11, gapAfter: 4 });
@@ -5516,23 +6154,50 @@ function buildPdfLines(result, officers, loans, generatedAt) {
       if (result.fairnessReview.selectedStatus === 'ADVISORY') {
         lines.push({ text: 'ADVISORY means the assignment passed primary fairness rules but includes a variance condition that should be monitored.', size: 10, gapAfter: 4 });
       }
-      buildReviewContextNotes(fairnessEvaluation).forEach((note) => {
+      buildReviewContextNotes(pdfFairnessEvaluation).forEach((note) => {
         lines.push({ text: note, size: 10, gapAfter: 4 });
       });
     }
-    fairnessEvaluation.summaryItems.forEach((item) => {
+    if (Array.isArray(result.linkedLoanGroups) && result.linkedLoanGroups.length) {
+      lines.push({ text: 'Linked loan groups were included in this assignment.', size: 10, gapAfter: 4 });
+      lines.push({ text: 'Linked groups may increase variance because multiple loans are intentionally assigned to the same officer.', size: 10, gapAfter: 4 });
+    }
+    pdfFairnessEvaluation.summaryItems.forEach((item) => {
       lines.push({ text: item, size: 11, gapAfter: 4 });
     });
-    fairnessEvaluation.notes.forEach((note) => {
+    pdfFairnessEvaluation.notes.forEach((note) => {
       lines.push({ text: note, size: 10, gapAfter: 4 });
     });
     lines.push({ text: '', size: 11, gapAfter: 6 });
 
     result.fairnessAudit.forEach((entry) => {
-      lines.push({ text: `${entry.loan.name} (${entry.loan.type})`, size: 12, gapAfter: 4 });
+      lines.push({ text: entry.unitType === 'linked_group' ? `${entry.linkedGroupLabel || entry.linkedGroupId} (Linked Group)` : `${entry.loan.name} (${entry.loan.type})`, size: 12, gapAfter: 4 });
+      if (entry.unitType === 'linked_group') {
+        lines.push({ text: `Loans: ${entry.loans.map((loan) => `${loan.name} (${loan.type})`).join(' • ')}`, size: 10, indent: 16, gapAfter: 4 });
+        lines.push({ text: `Reason: ${entry.linkedGroupReason || 'Member relationship continuity'}`, size: 10, indent: 16, gapAfter: 4 });
+      }
       lines.push({ text: `Chosen officer: ${entry.selectedOfficer}`, size: 11, indent: 16, gapAfter: 4 });
       lines.push({ text: buildAuditExplanation(entry), size: 11, indent: 16, gapAfter: 8 });
     });
+  }
+
+  if (Array.isArray(result.linkedLoanGroups) && result.linkedLoanGroups.length) {
+    lines.push({ text: 'Linked Member Loan Groups', size: 14, gapAfter: 10 });
+    result.linkedLoanGroups.forEach((group) => {
+      lines.push({ text: `${group.linkedGroupLabel || group.linkedGroupId} (${group.linkedGroupId})`, size: 12, gapAfter: 4 });
+      lines.push({ text: `Assigned officer: ${group.assignedOfficer || 'Unassigned'}`, size: 11, indent: 16, gapAfter: 4 });
+      lines.push({ text: `Reason: ${group.linkedGroupReason || 'Member relationship continuity'}`, size: 11, indent: 16, gapAfter: 4 });
+      lines.push({ text: `Loans: ${group.loans.map((loan) => `${loan.name} (${loan.type})`).join(' • ')}`, size: 10, indent: 16, gapAfter: 4 });
+      lines.push({ text: `Group total amount: ${formatCurrency(group.loans.reduce((sum, loan) => sum + getGoalAmountForLoan(loan), 0))}`, size: 10, indent: 16, gapAfter: 4 });
+      if (pdfFairnessEvaluation.overallResult === 'REVIEW') {
+        lines.push({ text: 'This linked group may have contributed to REVIEW and is documented as a fairness exception.', size: 10, indent: 16, gapAfter: 4 });
+      }
+    });
+    if (result.fairnessReview?.approvedBy) {
+      lines.push({ text: `Approved by: ${result.fairnessReview.approvedBy}`, size: 11, gapAfter: 4 });
+      lines.push({ text: `Approved at: ${result.fairnessReview.approvedAt || ''}`, size: 11, gapAfter: 4 });
+      lines.push({ text: `Approval reason: ${result.fairnessReview.approvalReason || 'Member relationship continuity'}`, size: 11, gapAfter: 8 });
+    }
   }
 
   lines.push({ text: 'Officer Running Totals', size: 14, gapAfter: 10 });
@@ -6732,7 +7397,10 @@ function assignLoans(officers, loans, runningTotals = { officers: {} }) {
     .map((loan) => ({
       name: loan.name.trim(),
       type: loan.type,
-      amountRequested: loan.amountRequested
+      amountRequested: loan.amountRequested,
+      linkedGroupId: linkedLoanGroupService?.normalizeLinkedGroupId?.(loan.linkedGroupId) || '',
+      linkedGroupLabel: linkedLoanGroupService?.normalizeLinkedGroupLabel?.(loan.linkedGroupLabel, loan.linkedGroupId) || '',
+      linkedGroupReason: linkedLoanGroupService?.normalizeLinkedGroupReason?.(loan.linkedGroupReason) || 'Member relationship continuity'
     }))
     .filter((loan) => loan.name)
     .filter((loan) => activeLoanTypes.includes(loan.type));
@@ -6746,6 +7414,21 @@ function assignLoans(officers, loans, runningTotals = { officers: {} }) {
   );
   if (!tierValidation.valid) {
     return { error: tierValidation.message };
+  }
+
+  const linkedGroupValidation = linkedLoanGroupService?.validateLinkedLoanGroups?.({
+    loans: cleanLoans.map((loan) => ({
+      ...loan,
+      category: getLoanCategoryForType(loan.type)
+    })),
+    officers: activeOfficers,
+    canUseLinkedLoanGroups: canUseFeature(entitlements?.FEATURES?.LINKED_LOAN_GROUPS),
+    getLockedFeatureMessage: () => 'Linked loan groups require Pro or Platinum.',
+    getLoanCategory: (loan) => getLoanCategoryForType(loan.type),
+    isOfficerEligibleForLoan: (officer, loan) => isOfficerEligibleForLoanType(officer, loan)
+  });
+  if (linkedGroupValidation && !linkedGroupValidation.valid) {
+    return { error: linkedGroupValidation.message };
   }
 
   const loanCount = cleanLoans.length;
@@ -6797,44 +7480,76 @@ function assignLoans(officers, loans, runningTotals = { officers: {} }) {
 
   const loanAssignments = [];
   const fairnessAudit = [];
+  const assignmentUnits = linkedLoanGroupService?.buildAssignmentUnits?.(cleanLoans, {
+    getLoanCategory: (loan) => getLoanCategoryForType(loan.type),
+    getLoanAmount: (loan) => getGoalAmountForLoan(loan)
+  }) || cleanLoans.map((loan) => ({
+    unitId: loan.name,
+    unitType: 'single_loan',
+    loans: [loan],
+    totalAmount: getGoalAmountForLoan(loan),
+    loanTypes: [loan.type],
+    loanCategories: [getLoanCategoryForType(loan.type)]
+  }));
+  const linkedLoanGroups = linkedGroupValidation?.groups || [];
+  const assignedUnitIds = new Set();
 
   try {
     activeLoanTypes.forEach((loanType) => {
-      const loansForType = shuffle(cleanLoans.filter((loan) => loan.type === loanType));
+      const unitsForType = shuffle(assignmentUnits.filter((unit) => unit.loanTypes.includes(loanType)));
 
-      if (!loansForType.length) {
+      if (!unitsForType.length) {
         return;
       }
 
-      const orderedLoansForType = [...loansForType].sort((loanA, loanB) => getGoalAmountForLoan(loanB) - getGoalAmountForLoan(loanA));
+      const orderedUnitsForType = [...unitsForType]
+        .filter((unit, index, allUnits) => allUnits.findIndex((candidate) => candidate.unitId === unit.unitId) === index)
+        .filter((unit) => !assignedUnitIds.has(unit.unitId))
+        .sort((unitA, unitB) => unitB.totalAmount - unitA.totalAmount);
 
-      orderedLoansForType.forEach((loan) => {
-        const assignmentDecision = chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCounts, officerAmountTotals, officerActiveSessions, runAssignmentCounts, runTypeAssignmentCounts, { isHomogeneousHelocPool: cleanLoans.length > 0 && cleanLoans.every((candidateLoan) => getMortgageLoanPermissionLevel(candidateLoan.type) === 'heloc') }, loan);
+      orderedUnitsForType.forEach((unit) => {
+        const assignmentDecision = chooseOfficerForAssignmentUnit(
+          officersByName,
+          officerLoanTotals,
+          officerTypeCounts,
+          officerAmountTotals,
+          officerActiveSessions,
+          runAssignmentCounts,
+          runTypeAssignmentCounts,
+          { isHomogeneousHelocPool: cleanLoans.length > 0 && cleanLoans.every((candidateLoan) => getMortgageLoanPermissionLevel(candidateLoan.type) === 'heloc') },
+          unit
+        );
         if (assignmentDecision.error) {
           throw new Error(assignmentDecision.error);
         }
         const assignedOfficer = assignmentDecision.selectedOfficer;
-
-      officerAssignments[assignedOfficer].push(loan);
-
-      if (officerTypeCounts[assignedOfficer][loanType] === undefined) {
-        officerTypeCounts[assignedOfficer][loanType] = 0;
-      }
-
-      officerTypeCounts[assignedOfficer][loanType] += 1;
-      officerAmountTotals[assignedOfficer] += getGoalAmountForLoan(loan);
-      officerLoanTotals[assignedOfficer] += 1;
-      runAssignmentCounts[assignedOfficer] += 1;
-      runTypeAssignmentCounts[assignedOfficer][loanType] = (runTypeAssignmentCounts[assignedOfficer][loanType] || 0) + 1;
-
-      loanAssignments.push({
-        loan,
-        officers: [assignedOfficer],
-        shared: false
-      });
+        assignedUnitIds.add(unit.unitId);
+        unit.loans.forEach((loan) => {
+          officerAssignments[assignedOfficer].push(loan);
+          if (officerTypeCounts[assignedOfficer][loan.type] === undefined) {
+            officerTypeCounts[assignedOfficer][loan.type] = 0;
+          }
+          officerTypeCounts[assignedOfficer][loan.type] += 1;
+          officerAmountTotals[assignedOfficer] += getGoalAmountForLoan(loan);
+          officerLoanTotals[assignedOfficer] += 1;
+          runAssignmentCounts[assignedOfficer] += 1;
+          runTypeAssignmentCounts[assignedOfficer][loan.type] = (runTypeAssignmentCounts[assignedOfficer][loan.type] || 0) + 1;
+          loanAssignments.push({
+            loan,
+            officers: [assignedOfficer],
+            shared: false,
+            assignmentUnitId: unit.unitId,
+            unitType: unit.unitType
+          });
+        });
 
         fairnessAudit.push({
-          loan,
+          loan: unit.loans[0],
+          loans: unit.loans,
+          linkedGroupId: unit.linkedGroupId || '',
+          linkedGroupLabel: unit.linkedGroupLabel || '',
+          linkedGroupReason: unit.linkedGroupReason || '',
+          unitType: unit.unitType,
           selectedOfficer: assignedOfficer,
           scoredOfficers: assignmentDecision.scoredOfficers
         });
@@ -6848,9 +7563,19 @@ function assignLoans(officers, loans, runningTotals = { officers: {} }) {
     loanAssignments: shuffle(loanAssignments),
     officerAssignments,
     fairnessAudit,
+    linkedLoanGroups: linkedLoanGroups.map((group) => ({
+      ...group,
+      assignedOfficer: loanAssignments.find((entry) => entry.loan.linkedGroupId === group.linkedGroupId)?.officers?.[0] || ''
+    })),
     officersUsed: uniqueOfficers,
     runningTotalsUsed: Object.fromEntries(allOfficerNames.map((officerName) => [officerName, normalizeOfficerStats(runningTotals.officers?.[officerName])]))
   };
+
+  if (linkedLoanGroups.length) {
+    baseResult.linkedGroupAssignmentPreserved = true;
+    baseResult.fairnessEvaluation = evaluateResultFairness(baseResult);
+    return baseResult;
+  }
 
   const globalOptimizedResult = optimizeGlobalAssignmentsResult({
     activeLoanTypes,
@@ -6875,6 +7600,7 @@ function assignLoans(officers, loans, runningTotals = { officers: {} }) {
 
 function renderResults(result) {
   if (result.error) {
+    latestAssignmentResult = null;
     setMessage(result.error, 'warning');
     loanAssignmentsEl.className = 'results empty';
     officerAssignmentsEl.className = 'results empty';
@@ -6896,6 +7622,7 @@ function renderResults(result) {
   }
 
   setMessage('');
+  latestAssignmentResult = result;
 
   loanAssignmentsEl.className = 'results';
   officerAssignmentsEl.className = 'results';
@@ -6911,9 +7638,12 @@ function renderResults(result) {
   result.loanAssignments.forEach((entry) => {
     const div = document.createElement('div');
     div.className = 'loan-line';
+    const linkedBadge = entry.loan.linkedGroupId
+      ? `<span class="loan-linked-inline-badge">${escapeHtml(entry.loan.linkedGroupLabel || entry.loan.linkedGroupId)}</span>`
+      : '';
 
     div.innerHTML = `
-      <div><span class="assignment-name">${escapeHtml(entry.loan.name)}</span> <span class="type-badge">${escapeHtml(entry.loan.type)}</span></div>
+      <div><span class="assignment-name">${escapeHtml(entry.loan.name)}</span> <span class="type-badge">${escapeHtml(entry.loan.type)}</span> ${linkedBadge}</div>
       <div class="assignment-amount">Requested: ${escapeHtml(formatCurrency(entry.loan.amountRequested))}</div>
       <div>Assigned to: ${escapeHtml(entry.officers[0])}</div>
     `;
@@ -6941,7 +7671,7 @@ function renderResults(result) {
       assignedLoans.forEach((loan) => {
         const pill = document.createElement('span');
         pill.className = 'loan-pill';
-        pill.textContent = formatLoanLabel(loan);
+        pill.textContent = `${formatLoanLabel(loan)}${loan.linkedGroupId ? ` [${loan.linkedGroupLabel || loan.linkedGroupId}]` : ''}`;
         group.appendChild(pill);
       });
     }
@@ -6963,6 +7693,32 @@ function renderResults(result) {
       </div>
     `;
     fairnessAuditEl.appendChild(fairnessSummaryCard);
+  }
+
+  if (Array.isArray(result.linkedLoanGroups) && result.linkedLoanGroups.length) {
+    const linkedGroupCard = document.createElement('div');
+    linkedGroupCard.className = 'audit-card';
+    linkedGroupCard.innerHTML = `
+      <h3>Linked Member Loan Groups <span class="badge">${escapeHtml(String(result.linkedLoanGroups.length))} groups</span></h3>
+      <div class="audit-summary">
+        <div class="audit-summary-line">Linked loan groups were included in this assignment.</div>
+        <div class="audit-summary-line">Linked groups may increase variance because multiple loans are intentionally assigned to the same officer.</div>
+      </div>
+    `;
+    result.linkedLoanGroups.forEach((group) => {
+      const groupLine = document.createElement('div');
+      groupLine.className = 'audit-summary';
+      groupLine.innerHTML = `
+        <div class="audit-summary-line"><strong>${escapeHtml(group.linkedGroupLabel || group.linkedGroupId)}</strong> (${escapeHtml(group.linkedGroupId)})</div>
+        <div class="audit-summary-line">Assigned officer: ${escapeHtml(group.assignedOfficer || 'Unassigned')}</div>
+        <div class="audit-summary-line">Reason: ${escapeHtml(group.linkedGroupReason || 'Member relationship continuity')}</div>
+        <div class="audit-summary-line">Loans: ${escapeHtml(group.loans.map((loan) => `${loan.name} (${loan.type})`).join(' • '))}</div>
+        <div class="audit-summary-line">Group total amount: ${escapeHtml(formatCurrency(group.loans.reduce((sum, loan) => sum + getGoalAmountForLoan(loan), 0)))}</div>
+        <div class="audit-summary-line">${escapeHtml(fairnessEvaluation.overallResult === 'REVIEW' ? 'This linked group may have contributed to REVIEW and is documented as a fairness exception.' : 'Linked group exception documented for member relationship continuity.')}</div>
+      `;
+      linkedGroupCard.appendChild(groupLine);
+    });
+    fairnessAuditEl.appendChild(linkedGroupCard);
   }
 
   result.fairnessAudit.forEach((entry) => {
@@ -6994,12 +7750,14 @@ function renderResults(result) {
       : 'N/A';
 
     auditCard.innerHTML = `
-      <h3>${escapeHtml(entry.loan.name)} <span class="type-badge">${escapeHtml(entry.loan.type)}</span></h3>
+      <h3>${escapeHtml(entry.linkedGroupLabel || entry.loan.name)} <span class="type-badge">${escapeHtml(entry.unitType === 'linked_group' ? 'Linked Group' : entry.loan.type)}</span></h3>
       <div class="audit-summary">
         <div class="audit-summary-line"><strong>Chosen officer:</strong> ${escapeHtml(entry.selectedOfficer)}</div>
+        ${entry.unitType === 'linked_group' ? `<div class="audit-summary-line"><strong>Fairness exception:</strong> ${escapeHtml(entry.linkedGroupReason || 'Member relationship continuity')}</div>` : ''}
+        ${entry.unitType === 'linked_group' ? `<div class="audit-summary-line"><strong>Loans:</strong> ${escapeHtml(entry.loans.map((loan) => `${loan.name} (${loan.type})`).join(' • '))}</div>` : ''}
         <div class="audit-summary-line">${escapeHtml(buildAuditExplanation(entry))}</div>
         <div class="audit-summary-metrics">
-          <span class="audit-metric"><strong>${escapeHtml(entry.loan.type)} load after assignment:</strong> ${escapeHtml(selectedTypeLoadLabel)}</span>
+          <span class="audit-metric"><strong>${escapeHtml(entry.unitType === 'linked_group' ? 'Linked group load after assignment' : `${entry.loan.type} load after assignment:`)}</strong> ${escapeHtml(selectedTypeLoadLabel)}</span>
           <span class="audit-metric"><strong>Projected goal dollars:</strong> ${escapeHtml(selectedAmountLoadLabel)}</span>
           <span class="audit-metric"><strong>Projected total loans:</strong> ${escapeHtml(selectedLoanLoadLabel)}</span>
         </div>
@@ -7240,6 +7998,16 @@ loanImportModalEl?.addEventListener('click', (event) => {
     closeLoanImportModal();
   }
 });
+linkLoansBtn?.addEventListener('click', openLinkedLoanGroupModal);
+saveLinkedLoanGroupBtn?.addEventListener('click', saveLinkedLoanGroupFromModal);
+removeSelectedLinkedLoansBtn?.addEventListener('click', removeSelectedLoansFromLinkedGroup);
+closeLinkedLoanGroupModalBtn?.addEventListener('click', closeLinkedLoanGroupModal);
+cancelLinkedLoanGroupBtn?.addEventListener('click', closeLinkedLoanGroupModal);
+linkedLoanGroupModalEl?.addEventListener('click', (event) => {
+  if (event.target === linkedLoanGroupModalEl) {
+    closeLinkedLoanGroupModal();
+  }
+});
 officerEditorClassSelect?.addEventListener('change', syncOfficerEditorFromClassPreset);
 consumerFocusedPrimaryInput?.addEventListener('input', () => {
   syncFocusWeightPair(consumerFocusedPrimaryInput, consumerFocusedSecondaryInput, 70);
@@ -7318,6 +8086,7 @@ removeOfficerBtn?.addEventListener('click', () => {
     return;
   }
   if (activeOfficerEditRow) {
+    markRunDirty();
     activeOfficerEditRow.remove();
   }
   closeOfficerEditorModal();
@@ -7371,6 +8140,7 @@ saveOfficerEditorBtn?.addEventListener('click', () => {
     officerList.appendChild(targetRow);
   }
 
+  markRunDirty();
   closeOfficerEditorModal();
   renderScenarioEngineRecommendation();
 });
@@ -7593,6 +8363,7 @@ refreshFairnessEngineUi();
 syncLicenseStatusUi();
 
 fairnessModelSelectEl?.addEventListener('change', () => {
+  markRunDirty();
   const selectedEngine = setSelectedFairnessEngine(fairnessModelSelectEl.value);
   fairnessModelSelectEl.value = selectedEngine;
   refreshFairnessEngineUi();
@@ -7603,6 +8374,7 @@ applyRecommendedEngineBtn?.addEventListener('click', () => {
   if (!recommendedEngine) {
     return;
   }
+  markRunDirty();
   setSelectedFairnessEngine(recommendedEngine);
   refreshFairnessEngineUi();
 });
@@ -7613,11 +8385,15 @@ officerList?.addEventListener('click', () => {
 
 officerList?.addEventListener('input', renderScenarioEngineRecommendation);
 officerList?.addEventListener('change', renderScenarioEngineRecommendation);
+officerList?.addEventListener('input', markRunDirty);
+officerList?.addEventListener('change', markRunDirty);
 loanList?.addEventListener('click', () => {
   window.setTimeout(renderScenarioEngineRecommendation, 0);
 });
 loanList?.addEventListener('input', renderScenarioEngineRecommendation);
 loanList?.addEventListener('change', renderScenarioEngineRecommendation);
+loanList?.addEventListener('input', markRunDirty);
+loanList?.addEventListener('change', markRunDirty);
 
 randomizeBtn.addEventListener('click', async () => {
   if (pendingReviewAssignment) {
@@ -7751,6 +8527,9 @@ removeLoanHistoryBtn?.addEventListener('click', async () => {
 
 clearBtn.addEventListener('click', () => {
   pendingReviewAssignment = null;
+  latestAssignmentResult = null;
+  isAssignmentCommitInProgress = false;
+  currentRunFinalized = false;
   closeFairnessReviewModal();
   officerList.innerHTML = '';
   loanList.innerHTML = '';
@@ -7771,6 +8550,7 @@ clearBtn.addEventListener('click', () => {
     distributionDetailsEl.open = false;
   }
 
+  updateFolderStatus();
   renderScenarioEngineRecommendation();
 });
 

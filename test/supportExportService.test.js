@@ -37,6 +37,30 @@ test('support manifest includes app version, active tier, and fairness engine', 
   assert.equal(manifest.license.licenseStatus, 'active');
 });
 
+test('support manifest includes linked loan group metadata and approval details', () => {
+  const manifest = supportExport.buildSupportManifest({
+    linkedLoanGroupMetadata: {
+      linkedGroupCount: 1,
+      linkedGroups: [
+        {
+          linkedGroupId: 'MLG-001',
+          linkedGroupLabel: 'Member 2048',
+          assignedOfficer: 'Avery'
+        }
+      ],
+      approval: {
+        approvedBy: 'Jane Smith',
+        approvedAt: '2026-05-05T12:00:00.000Z',
+        approvalReason: 'Member relationship continuity'
+      }
+    }
+  });
+
+  assert.equal(manifest.linkedLoanGroups.linkedGroupCount, 1);
+  assert.equal(manifest.linkedLoanGroups.linkedGroups[0].linkedGroupId, 'MLG-001');
+  assert.equal(manifest.linkedLoanGroups.approval.approvedBy, 'Jane Smith');
+});
+
 test('missing support files are represented as missing and not fatal', () => {
   const files = [
     supportExport.createIncludedFileRecord({

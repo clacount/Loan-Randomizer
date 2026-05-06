@@ -39,6 +39,8 @@ LendingFair stores operational files in the selected working folder, including:
 - JSON configuration/state files
 - PDF reports
 
+Linked member loan groups are documented in the local UI, reports, and support exports, but they still rely on local operator setup and review. They are not synced through a shared backend service in Basic/Pro.
+
 Institutions should decide where these files should live and how they should be backed up or retained.
 
 ## Licensing

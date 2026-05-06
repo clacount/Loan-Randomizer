@@ -95,3 +95,14 @@ Use this checklist before sharing a pilot build with a credit union.
 - [ ] Material dollar imbalance remains REVIEW and explains that loan amount mix/officer eligibility may contribute.
 - [ ] Missing HELOC weighted metric uses support-lane fallback instead of failing solely from the missing metric.
 - [ ] Single-MLO expected variance remains protected while policy failures still require REVIEW.
+
+## Linked Member Loan Groups
+
+- [ ] Basic blocks linked loan groups.
+- [ ] Pro allows linked loan groups.
+- [ ] Linked groups of 2 or more loans assign all included loans to one officer.
+- [ ] Ineligible mixed groups are blocked before assignment.
+- [ ] Linked group badges appear in the loan list and assignment results.
+- [ ] Linked group metadata appears in the PDF fairness audit section.
+- [ ] REVIEW assignments that include linked groups require typed manager first and last name before save.
+- [ ] Approved linked-group REVIEW assignments record approval name, timestamp, and reason.

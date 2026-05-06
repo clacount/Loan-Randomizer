@@ -39,6 +39,7 @@ test('Basic supports consumer loans and the global engine only', () => {
   assert.equal(entitlements.canUseFeature(FEATURES.MULTI_OFFICER_ROLES, TIERS.BASIC), false);
   assert.equal(entitlements.canUseFeature(FEATURES.MORTGAGE_LOANS, TIERS.BASIC), false);
   assert.equal(entitlements.canUseFeature(FEATURES.IMPORT_LOANS, TIERS.BASIC), false);
+  assert.equal(entitlements.canUseFeature(FEATURES.LINKED_LOAN_GROUPS, TIERS.BASIC), false);
   assert.equal(entitlements.canUseFeature(FEATURES.SIMULATION, TIERS.BASIC), false);
   assert.equal(entitlements.canUseEngine(ENGINES.OFFICER_LANE, TIERS.BASIC), false);
   assert.equal(entitlements.canUseLoanCategory(LOAN_CATEGORIES.MORTGAGE, TIERS.BASIC), false);
@@ -58,6 +59,7 @@ test('Pro supports officer lane, consumer loans, mortgage loans, multiple office
   assert.equal(entitlements.canUseOfficerRole(OFFICER_ROLES.MORTGAGE, TIERS.PRO), true);
   assert.equal(entitlements.canUseOfficerRole(OFFICER_ROLES.FLEX, TIERS.PRO), true);
   assert.equal(entitlements.canUseFeature(FEATURES.IMPORT_LOANS, TIERS.PRO), true);
+  assert.equal(entitlements.canUseFeature(FEATURES.LINKED_LOAN_GROUPS, TIERS.PRO), true);
   assert.equal(entitlements.canUseFeature(FEATURES.SIMULATION, TIERS.PRO), true);
   assert.equal(entitlements.getSimulationMaxDays(TIERS.PRO), 60);
   assert.equal(entitlements.canUseUnlimitedSimulation(TIERS.PRO), false);
@@ -65,6 +67,7 @@ test('Pro supports officer lane, consumer loans, mortgage loans, multiple office
 
 test('Platinum supports unlimited simulation', () => {
   assert.equal(entitlements.canUseFeature(FEATURES.IMPORT_LOANS, TIERS.PLATINUM), true);
+  assert.equal(entitlements.canUseFeature(FEATURES.LINKED_LOAN_GROUPS, TIERS.PLATINUM), true);
   assert.equal(entitlements.canUseFeature(FEATURES.SIMULATION, TIERS.PLATINUM), true);
   assert.equal(entitlements.getSimulationMaxDays(TIERS.PLATINUM), null);
   assert.equal(entitlements.canUseUnlimitedSimulation(TIERS.PLATINUM), true);
@@ -138,6 +141,21 @@ test('validation rejects Basic with mortgage loans', () => {
 
   assert.equal(result.valid, false);
   assert.equal(result.code, 'MORTGAGE_LOANS_NOT_AVAILABLE');
+});
+
+test('validation rejects Basic with linked loan groups', () => {
+  const result = entitlements.validateTierForRun({
+    tier: TIERS.BASIC,
+    engineType: ENGINES.GLOBAL,
+    officers: [{ name: 'A', eligibility: { consumer: true, mortgage: false } }],
+    loans: [
+      { name: 'L1', type: 'Auto', category: LOAN_CATEGORIES.CONSUMER, linkedGroupId: 'MLG-001' },
+      { name: 'L2', type: 'Personal', category: LOAN_CATEGORIES.CONSUMER, linkedGroupId: 'MLG-001' }
+    ]
+  });
+
+  assert.equal(result.valid, false);
+  assert.equal(result.code, 'LINKED_LOAN_GROUPS_NOT_AVAILABLE');
 });
 
 test('validation allows Basic global engine with consumer loans and a single officer role', () => {

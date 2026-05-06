@@ -111,3 +111,15 @@ For Officer Lane Fairness, low-volume flex participation may be treated as infor
 For HELOC-only support scenarios, if the weighted HELOC optimization metric is unavailable, LendingFair falls back to standard support-lane variance checks and records that fallback in the audit notes.
 
 Single-MLO mortgage lane variance is expected when only one active mortgage-only officer is available and routing policy passes. That expected pattern is flagged in the audit, while true policy failures can still require REVIEW.
+
+## Linked Member Loan Groups
+
+Some credit unions may intentionally link multiple applications for the same member so one loan officer handles the full relationship.
+
+- LendingFair treats a linked member loan group as a documented fairness exception.
+- The group is assigned as one unit to one eligible officer.
+- Fairness still evaluates the final assignment loan by loan and dollar by dollar.
+- Linked groups can increase variance and may legitimately trigger REVIEW.
+- If a REVIEW assignment includes linked groups, manager typed approval is required before the assignment is saved.
+
+Reports and support diagnostics record linked group labels, reasons, assigned officers, and approval metadata when applicable.
