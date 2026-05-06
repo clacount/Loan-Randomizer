@@ -158,11 +158,11 @@ function shouldShowDemoControls() {
   return !customerConfig || customerConfig.shouldShowDemoControls?.() !== false;
 }
 
-const HEADER_LOGO_PATH = './custom_branding.png';
+const HEADER_LOGO_PATH = '../branding/custom_branding.png';
 const APP_BRANDING_LOGO_PATHS = [
-  './LendFair_Branding.png',
-  './LendingFair_Branding.png',
-  './lendfair_branding.png'
+  '../branding/LendFair_Branding.png',
+  '../branding/LendingFair_Branding.png',
+  '../branding/lendfair_branding.png'
 ];
 
 const logoEl = document.getElementById('logo');
