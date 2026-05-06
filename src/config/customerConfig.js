@@ -2,8 +2,9 @@
   // Edit this object when packaging a customer build without adding an inline script.
   // Leave it empty for normal development behavior.
   const LOCAL_CUSTOMER_CONFIG = {
+    // Uncomment for actual customer implementation.
      // customerName: 'Example Federal Credit Union',
-     // tier: 'pro',
+     // tier: 'basic',
      // appMode: 'customer',
      // showInternalTierSelector: false,
      // showDemoControls: false,

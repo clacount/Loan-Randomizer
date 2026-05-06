@@ -1,0 +1,12 @@
+{
+  "licenseId": "lf-pilot-expired-001",
+  "customerName": "Example Credit Union",
+  "tier": "pro",
+  "licenseType": "pilot",
+  "issuedAt": "2026-03-01",
+  "expiresAt": "2026-04-30",
+  "graceDays": 0,
+  "notes": "Sample expired Pro pilot license for local browser testing."
+}
+
+ew0KICAibGljZW5zZUlkIjogImxmLXBpbG90LWV4cGlyZWQtMDAxIiwNCiAgImN1c3RvbWVyTmFtZSI6ICJFeGFtcGxlIENyZWRpdCBVbmlvbiIsDQogICJ0aWVyIjogInBybyIsDQogICJsaWNlbnNlVHlwZSI6ICJwaWxvdCIsDQogICJpc3N1ZWRBdCI6ICIyMDI2LTAzLTAxIiwNCiAgImV4cGlyZXNBdCI6ICIyMDI2LTA0LTMwIiwNCiAgImdyYWNlRGF5cyI6IDAsDQogICJub3RlcyI6ICJTYW1wbGUgZXhwaXJlZCBQcm8gcGlsb3QgbGljZW5zZSBmb3IgbG9jYWwgYnJvd3NlciB0ZXN0aW5nLiINCn0=

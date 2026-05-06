@@ -19,7 +19,7 @@ This is a simple local web app for assigning loans to loan officers using fair r
 
 ## How to use
 1. Download and unzip the project.
-2. Open `index.html` in a current version of Microsoft Edge or Google Chrome.
+2. Open `LendingFair Launcher.html` in a current version of Microsoft Edge or Google Chrome.
 3. Click **Connect Working Folder** and pick the parent folder where monthly loan-randomizer data should be saved.
 4. The app automatically creates/uses a monthly subfolder in `YYYY-MM` format (for example, `2026-04`) and reads `loan-randomizer-running-totals.csv` from that month.
 5. If the CSV does not exist yet for the active month, the app creates it and you can enter the initial loan officers manually.
@@ -60,13 +60,19 @@ The app also keeps a CSV state file named `loan-randomizer-running-totals.csv` i
 - **7 mixed loans, 3 officers**: each type stays balanced separately while the total workload is kept as even as possible.
 
 ## Notes
-- To apply custom branding, add `custom_branding.png` at the repository root; the app uses it in the header and generated PDFs when present.
+- The browser entrypoint now lives at `src/app/index.html`; `LendingFair Launcher.html` is the user-facing launcher at the repository root.
+- Default branding assets live under `src/branding/`.
 - Loan officer names must be unique so totals display correctly.
 - Amount Requested must be a valid non-negative number for every entered loan.
 - Folder selection and direct PDF saving require a browser with the File System Access API.
 - The CSV running-totals file is stored in the active `YYYY-MM` subfolder under the selected output folder and is reused the next time that folder is selected during that month.
 - No install is needed.
 - This runs fully in the browser and can be shared as files.
+
+## Windows shortcut helper
+- `scripts/Open LendingFair.cmd` opens the app using the repo-relative path to `src/app/index.html`.
+- `scripts/Create Desktop Shortcut.vbs` creates a Desktop shortcut named `LendingFair` that points to that launcher script.
+- For non-technical Windows users, the cleanest rollout is: unzip the folder, run `scripts/Create Desktop Shortcut.vbs` once, then launch LendingFair from the Desktop shortcut.
 
 ## Product tiers / entitlement foundation
 - LendingFair now has internal support for Basic, Pro, and Platinum tiers through a centralized entitlement layer.

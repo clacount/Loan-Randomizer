@@ -1,5 +1,5 @@
 (function initializeFocusWeightSettingsService(globalScope) {
-  const DEFAULT_FOCUS_WEIGHTS_FILE = './default_focus_weights.json';
+  const DEFAULT_FOCUS_WEIGHTS_FILE = '../config/default_focus_weights.json';
   const SAVED_FOCUS_WEIGHTS_FILE = 'focus_weights.json';
 
   const HARD_DEFAULT_FOCUS_WEIGHTS = {
