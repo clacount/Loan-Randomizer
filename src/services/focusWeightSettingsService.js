@@ -90,7 +90,17 @@
     };
   }
 
+  function canFetchDefaultWeightsFile() {
+    const protocol = String(globalScope.location?.protocol || '').toLowerCase();
+    return Boolean(globalScope.fetch) && protocol !== 'file:';
+  }
+
   async function loadDefaultFocusWeights() {
+    if (!canFetchDefaultWeightsFile()) {
+      cachedDefaultWeights = normalizeFocusWeights(getHardDefaultFocusWeights());
+      return cachedDefaultWeights;
+    }
+
     try {
       const response = await globalScope.fetch(DEFAULT_FOCUS_WEIGHTS_FILE, { cache: 'no-store' });
       if (!response.ok) {

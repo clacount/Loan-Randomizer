@@ -143,19 +143,40 @@
     return Math.max(...values) - Math.min(...values);
   }
 
+  function calculateMaxDeviationFromAverage(entries, valueKey) {
+    if (!entries.length) {
+      return 0;
+    }
+
+    const values = entries.map((entry) => Number(entry[valueKey]) || 0);
+    if (!values.length) {
+      return 0;
+    }
+
+    const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+    return Math.max(...values.map((value) => Math.abs(value - average)));
+  }
+
   function buildCategoryVariance(entries, countKey, amountKey) {
     const maxCountVariancePercent = calculateMaxVariance(entries, countKey);
     const maxAmountVariancePercent = calculateMaxVariance(entries, amountKey);
     const maxCountSpread = calculateMaxSpread(entries, countKey);
+    const maxCountDeviationFromAverage = calculateMaxDeviationFromAverage(entries, countKey);
     const oneLoanSpreadToleranceApplied = maxCountVariancePercent > COUNT_VARIANCE_THRESHOLD_PERCENT
       && maxCountSpread <= 1;
+    const oneLoanTargetDeviationToleranceApplied = maxCountVariancePercent > COUNT_VARIANCE_THRESHOLD_PERCENT
+      && maxCountDeviationFromAverage <= 1;
 
     return {
       maxCountSpread,
+      maxCountDeviationFromAverage,
       maxCountVariancePercent,
       maxAmountVariancePercent,
       oneLoanSpreadToleranceApplied,
-      countDistributionPass: maxCountVariancePercent <= COUNT_VARIANCE_THRESHOLD_PERCENT || oneLoanSpreadToleranceApplied,
+      oneLoanTargetDeviationToleranceApplied,
+      countDistributionPass: maxCountVariancePercent <= COUNT_VARIANCE_THRESHOLD_PERCENT
+        || oneLoanSpreadToleranceApplied
+        || oneLoanTargetDeviationToleranceApplied,
       amountDistributionPass: maxAmountVariancePercent <= AMOUNT_VARIANCE_THRESHOLD_PERCENT
     };
   }
@@ -184,6 +205,46 @@
 
   function buildOfficerClassMap(officers = []) {
     return Object.fromEntries(officers.map((officer) => [officer.name, getOfficerClassCode(officer)]));
+  }
+
+  function hasLaneParticipation(entry = {}, lane) {
+    if (lane === 'consumer') {
+      return (Number(entry.consumerLoanCount) || 0) > 0 || (Number(entry.consumerAmount) || 0) > 0;
+    }
+    if (lane === 'mortgage') {
+      return (Number(entry.mortgageLoanCount) || 0) > 0 || (Number(entry.mortgageAmount) || 0) > 0;
+    }
+    return false;
+  }
+
+  function hasCurrentRunLaneParticipation(currentRunLaneParticipationByOfficer = {}, officerName, lane) {
+    const participation = currentRunLaneParticipationByOfficer?.[officerName];
+    if (!participation) {
+      return null;
+    }
+
+    if (lane === 'consumer') {
+      return (Number(participation.consumerLoanCount) || 0) > 0
+        || (Number(participation.consumerAmount) || 0) > 0;
+    }
+    if (lane === 'mortgage') {
+      return (Number(participation.mortgageLoanCount) || 0) > 0
+        || (Number(participation.mortgageAmount) || 0) > 0;
+    }
+    return (Number(participation.totalLoans) || 0) > 0
+      || (Number(participation.totalAmount) || 0) > 0;
+  }
+
+  function getCurrentRunLaneLoanCount(currentRunLaneParticipationByOfficer = {}, lane) {
+    return Object.values(currentRunLaneParticipationByOfficer || {}).reduce((sum, participation) => {
+      if (lane === 'consumer') {
+        return sum + (Number(participation?.consumerLoanCount) || 0);
+      }
+      if (lane === 'mortgage') {
+        return sum + (Number(participation?.mortgageLoanCount) || 0);
+      }
+      return sum + (Number(participation?.totalLoans) || 0);
+    }, 0);
   }
 
   function buildFlexVariance(flexEntries = []) {
@@ -381,7 +442,15 @@
     return new GlobalFairnessEngineClass(dependencies);
   }
 
-  function evaluateFairness({ engineType, officers = [], officerStats = [], optimizationMetrics = {} } = {}) {
+  function evaluateFairness({
+    engineType,
+    officers = [],
+    officerStats = [],
+    optimizationMetrics = {},
+    currentRunHasConsumerLoans = null,
+    currentRunHasMortgageLoans = null,
+    currentRunLaneParticipationByOfficer = {}
+  } = {}) {
     const normalizedEngine = normalizeEngineType(engineType);
     const normalizedOfficers = Array.isArray(officers) ? officers.map((officer) => normalizeOfficer(officer)) : [];
     const activeOfficers = normalizedOfficers.filter((officer) => !officer.isOnVacation);
@@ -397,11 +466,39 @@
     const overallAverageDollarAmount = participatingOfficerStats.length
       ? participatingOfficerStats.reduce((sum, entry) => sum + (Number(entry.totalAmount) || 0), 0) / participatingOfficerStats.length
       : 0;
+    const currentRunConsumerLoanCount = getCurrentRunLaneLoanCount(currentRunLaneParticipationByOfficer, 'consumer');
 
     const officerClassMap = buildOfficerClassMap(activeOfficers);
-    const consumerLaneEntries = participatingOfficerStats.filter((entry) => {
+    const consumerDisplayEntries = participatingOfficerStats.filter((entry) => {
       const officerConfig = activeOfficers.find((officer) => officer.name === entry.officer);
       return Boolean(officerConfig?.eligibility?.consumer);
+    });
+    const consumerLaneEntries = participatingOfficerStats.filter((entry) => {
+      const officerClassCode = officerClassMap[entry.officer];
+      const officerConfig = activeOfficers.find((officer) => officer.name === entry.officer);
+      if (!officerConfig?.eligibility?.consumer) {
+        return false;
+      }
+      if (officerClassCode === 'F') {
+        const hasCurrentRunConsumerParticipation = hasCurrentRunLaneParticipation(
+          currentRunLaneParticipationByOfficer,
+          entry.officer,
+          'consumer'
+        );
+        if (hasCurrentRunConsumerParticipation !== null) {
+          return currentRunHasConsumerLoans === false
+            ? hasLaneParticipation(entry, 'consumer')
+            : (
+              currentRunConsumerLoanCount <= 1
+                ? hasCurrentRunConsumerParticipation
+                : true
+            );
+        }
+        return currentRunHasConsumerLoans === false
+          ? hasLaneParticipation(entry, 'consumer')
+          : true;
+      }
+      return true;
     });
     const flexEntries = participatingOfficerStats.filter((entry) => officerClassMap[entry.officer] === 'F');
     const observedLoanTypeNames = [
@@ -419,6 +516,9 @@
       if (officerClassMap[entry.officer] !== 'M') {
         return false;
       }
+      if (currentRunHasMortgageLoans === false) {
+        return false;
+      }
       if (!isHelocOnlyMortgageRun) {
         return true;
       }
@@ -427,10 +527,10 @@
     });
 
     const consumerEntries = normalizedEngine === FAIRNESS_ENGINES.OFFICER_LANE
-      ? (consumerLaneEntries.length ? consumerLaneEntries : participatingOfficerStats)
+      ? consumerLaneEntries
       : participatingOfficerStats;
     const mortgageEntries = normalizedEngine === FAIRNESS_ENGINES.OFFICER_LANE
-      ? (mortgageLaneEntries.length ? mortgageLaneEntries : participatingOfficerStats)
+      ? mortgageLaneEntries
       : participatingOfficerStats;
 
     const flexVariance = buildFlexVariance(flexEntries);
@@ -449,6 +549,11 @@
         amountDistributionPass: flexLaneVariance.amountDistributionPass
       }
     };
+    const displayCategoryMetrics = {
+      consumerVariance: buildCategoryVariance(consumerDisplayEntries, 'consumerLoanCount', 'consumerAmount'),
+      mortgageVariance: categoryMetrics.mortgageVariance,
+      flexVariance: categoryMetrics.flexVariance
+    };
 
     const mortgageByOfficer = participatingOfficerStats.map((entry) => ({ officer: entry.officer, amount: Number(entry.mortgageAmount) || 0 }));
     const mortgageByTypeByOfficer = Object.fromEntries(
@@ -465,9 +570,16 @@ Object.entries(typeBreakdown).filter(([typeName]) => isMortgageTypeName(typeName
       officers: activeOfficers,
       officerStats: participatingOfficerStats,
       categoryMetrics,
+      displayCategoryMetrics,
+      displayLaneEntries: {
+        consumer: consumerDisplayEntries,
+        mortgage: mortgageEntries
+      },
       mortgageByOfficer,
       mortgageByTypeByOfficer,
       flexVariance,
+      currentRunHasConsumerLoans,
+      currentRunLaneParticipationByOfficer,
       optimizationMetrics
     };
 
