@@ -579,6 +579,7 @@ Object.entries(typeBreakdown).filter(([typeName]) => isMortgageTypeName(typeName
       mortgageByTypeByOfficer,
       flexVariance,
       currentRunHasConsumerLoans,
+      currentRunHasMortgageLoans,
       currentRunLaneParticipationByOfficer,
       optimizationMetrics
     };

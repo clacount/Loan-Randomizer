@@ -309,6 +309,60 @@ test('officer_lane ignores mortgage-lane review pressure during consumer-only ru
   assert.notEqual(evaluation.statusMetricDescriptor?.key, 'mortgage_lane_dollar_variance');
 });
 
+test('officer_lane skips mortgage policy checks during consumer-only runs even with flex-heavy mortgage history', () => {
+  const evaluation = global.FairnessEngineService.evaluateFairness({
+    engineType: 'officer_lane',
+    currentRunHasConsumerLoans: true,
+    currentRunHasMortgageLoans: false,
+    officers: [
+      { name: 'ashley', eligibility: { consumer: true, mortgage: false } },
+      { name: 'jade', eligibility: { consumer: true, mortgage: true } },
+      { name: 'kash', eligibility: { consumer: false, mortgage: true } }
+    ],
+    officerStats: [
+      {
+        officer: 'ashley',
+        totalLoans: 2,
+        totalAmount: 18000,
+        consumerLoanCount: 2,
+        consumerAmount: 18000,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        typeBreakdown: { Auto: 1, Personal: 1 }
+      },
+      {
+        officer: 'jade',
+        totalLoans: 6,
+        totalAmount: 296000,
+        consumerLoanCount: 2,
+        consumerAmount: 20000,
+        mortgageLoanCount: 4,
+        mortgageAmount: 276000,
+        typeBreakdown: { Personal: 2, HELOC: 4 }
+      },
+      {
+        officer: 'kash',
+        totalLoans: 1,
+        totalAmount: 80000,
+        consumerLoanCount: 0,
+        consumerAmount: 0,
+        mortgageLoanCount: 1,
+        mortgageAmount: 80000,
+        typeBreakdown: { 'First Mortgage': 1 }
+      }
+    ]
+  });
+
+  assert.equal(evaluation.metrics.consumerVariance.maxCountVariancePercent <= 15, true);
+  assert.equal(evaluation.metrics.consumerVariance.maxAmountVariancePercent <= 20, true);
+  assert.equal(evaluation.metrics.mortgageVariance.maxCountVariancePercent, 0);
+  assert.equal(evaluation.metrics.mortgageVariance.maxAmountVariancePercent, 0);
+  assert.equal(evaluation.overallResult, 'PASS');
+  assert.notEqual(evaluation.statusMetricDescriptor?.key, 'mortgage_routing_policy');
+  assert.notEqual(evaluation.statusMetricDescriptor?.key, 'mortgage_leadership_policy');
+  assert.notEqual(evaluation.statusMetricDescriptor?.key, 'mortgage_flex_participation_policy');
+});
+
 test('officer_lane ignores consumer-lane review pressure during mortgage-only runs', () => {
   const evaluation = global.FairnessEngineService.evaluateFairness({
     engineType: 'officer_lane',
