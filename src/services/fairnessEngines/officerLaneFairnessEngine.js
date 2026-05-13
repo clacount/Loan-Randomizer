@@ -65,22 +65,68 @@
         officers,
         officerStats = [],
         categoryMetrics,
+        displayCategoryMetrics = categoryMetrics,
+        displayLaneEntries = {},
         mortgageByOfficer = [],
         mortgageByTypeByOfficer = {},
-        flexVariance
+        flexVariance,
+        currentRunHasConsumerLoans,
+        currentRunHasMortgageLoans,
+        currentRunLaneParticipationByOfficer = {}
       } = context;
       const singleMlo = this.hasSingleMortgageOnlyOfficer(officers);
       const normalizedOfficers = officers.map((officer) => this.normalizeOfficer(officer));
       const officerClassMap = this.buildOfficerClassMap(normalizedOfficers);
+      const hasCurrentRunParticipationData = Object.keys(currentRunLaneParticipationByOfficer || {}).length > 0;
+      const currentRunConsumerLoanCount = Object.values(currentRunLaneParticipationByOfficer || {}).reduce(
+        (sum, participation) => sum + (Number(participation?.consumerLoanCount) || 0),
+        0
+      );
+      const currentRunMortgageLoanCount = Object.values(currentRunLaneParticipationByOfficer || {}).reduce(
+        (sum, participation) => sum + (Number(participation?.mortgageLoanCount) || 0),
+        0
+      );
       const consumerLaneEntries = officerStats.filter((entry) => {
         const officerConfig = normalizedOfficers.find((officer) => officer.name === entry.officer);
-        return Boolean(officerConfig?.eligibility?.consumer);
+        if (!officerConfig?.eligibility?.consumer) {
+          return false;
+        }
+        if (officerClassMap[entry.officer] === 'F') {
+          const currentRunParticipation = currentRunLaneParticipationByOfficer?.[entry.officer];
+          const hasCurrentRunConsumerParticipation = currentRunParticipation
+            ? (
+              (Number(currentRunParticipation.consumerLoanCount) || 0) > 0
+              || (Number(currentRunParticipation.consumerAmount) || 0) > 0
+            )
+            : null;
+          if (hasCurrentRunConsumerParticipation !== null) {
+            return currentRunHasConsumerLoans === false
+              ? ((Number(entry.consumerLoanCount) || 0) > 0 || (Number(entry.consumerAmount) || 0) > 0)
+              : (
+                currentRunConsumerLoanCount <= 1
+                  ? hasCurrentRunConsumerParticipation
+                  : true
+              );
+          }
+          return currentRunHasConsumerLoans === false
+            ? ((Number(entry.consumerLoanCount) || 0) > 0 || (Number(entry.consumerAmount) || 0) > 0)
+            : true;
+        }
+        return true;
       });
       const flexOfficers = normalizedOfficers.filter((officer) => this.isFlexOfficer(officer)).map((officer) => officer.name);
       const hasConsumerLane = normalizedOfficers.some((officer) => this.getOfficerClassCode(officer) === 'C');
       const hasFlexLane = normalizedOfficers.some((officer) => this.getOfficerClassCode(officer) === 'F');
+      const useLowVolumeConsumerFlexParticipationFilter = hasCurrentRunParticipationData
+        && currentRunHasConsumerLoans !== false
+        && currentRunConsumerLoanCount > 0
+        && currentRunConsumerLoanCount <= 1;
+      const consumerSummaryEntries = Array.isArray(displayLaneEntries.consumer) && displayLaneEntries.consumer.length
+        ? displayLaneEntries.consumer
+        : consumerLaneEntries;
+      const consumerSummaryVariance = displayCategoryMetrics.consumerVariance || categoryMetrics.consumerVariance;
       const totalConsumerLoans = officerStats.reduce((sum, entry) => sum + (Number(entry.consumerLoanCount) || 0), 0);
-      const hasConsumerActivity = totalConsumerLoans > 0 || categoryMetrics.consumerVariance.maxAmountVariancePercent > 0;
+      const hasConsumerActivity = totalConsumerLoans > 0 || consumerSummaryVariance.maxAmountVariancePercent > 0;
       const allMortgageTypes = officerStats
         .flatMap((entry) => Object.entries(entry.typeBreakdown || {}))
         .filter(([, count]) => (Number(count) || 0) > 0)
@@ -95,9 +141,13 @@
       });
       const mortgageOfficers = normalizedOfficers
         .filter((officer) => (
+          currentRunHasMortgageLoans === false
+            ? false
+            : (
           isHelocOnlyMortgageRun
             ? this.isHelocEligibleMortgageOnlyOfficer(officer)
             : this.isMortgageOnlyOfficer(officer)
+            )
         ))
         .map((officer) => officer.name);
       const hasMortgageLane = mortgageOfficers.length > 0;
@@ -113,8 +163,24 @@
       )).length;
       const hasAnyMortgageOnlyOfficer = mortgageOfficers.length > 0;
       const allowBroadFlexMortgageCoverage = normalizedOfficers.some((officer) => this.isFlexOfficer(officer) && officer.mortgageOverride);
+      const hasCurrentRunMortgageParticipationData = hasCurrentRunParticipationData;
+      const useLowVolumeMortgageFlexParticipationFilter = hasCurrentRunMortgageParticipationData
+        && currentRunHasMortgageLoans !== false
+        && currentRunMortgageLoanCount > 0
+        && currentRunMortgageLoanCount <= 1;
+      const effectiveFlexMortgageOfficers = flexOfficers.filter((officerName) => {
+        if (!useLowVolumeMortgageFlexParticipationFilter) {
+          return true;
+        }
+        const participation = currentRunLaneParticipationByOfficer?.[officerName];
+        return ((Number(participation?.mortgageLoanCount) || 0) > 0)
+          || ((Number(participation?.mortgageAmount) || 0) > 0);
+      });
+      const mortgagePolicyOfficerNames = new Set([...mortgageOfficers, ...effectiveFlexMortgageOfficers]);
 
-      const totalMortgageAmount = mortgageByOfficer.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+      const totalMortgageAmount = mortgageByOfficer
+        .filter((entry) => mortgagePolicyOfficerNames.has(entry.officer))
+        .reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
       const mortgageAmountForM = mortgageByOfficer
         .filter((entry) => mortgageOfficers.includes(entry.officer))
         .reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
@@ -122,7 +188,7 @@
       const mortgageRoutingShareToM = totalMortgageAmount ? (mortgageAmountForM / totalMortgageAmount) : 1;
       const mortgageRoutingPass = !hasMortgageLane || singleMlo || !totalMortgageAmount || mortgageRoutingShareToM >= 0.5;
       const flexMortgageTypesByOfficer = Object.fromEntries(
-        flexOfficers.map((officerName) => [officerName, mortgageByTypeByOfficer[officerName] || {}])
+        effectiveFlexMortgageOfficers.map((officerName) => [officerName, mortgageByTypeByOfficer[officerName] || {}])
       );
 
       const flexParticipationViolation = this.didFlexMortgageParticipationViolateRules({
@@ -154,7 +220,7 @@
       const flexMinimalParticipationToleranceApplied = hasFlexLane
         && (activeFlexOfficerCount < 2 || totalFlexAssignedLoans < 2);
       const mortgageOfficerLoanCounts = mortgageOfficers.map((officerName) => Number((officerStats.find((entry) => entry.officer === officerName)?.mortgageLoanCount) || 0));
-      const flexOfficerLoanCounts = flexOfficers.map((officerName) => Number((officerStats.find((entry) => entry.officer === officerName)?.mortgageLoanCount) || 0));
+      const flexOfficerLoanCounts = effectiveFlexMortgageOfficers.map((officerName) => Number((officerStats.find((entry) => entry.officer === officerName)?.mortgageLoanCount) || 0));
       const mortgageLoanCountForM = mortgageOfficerLoanCounts.reduce((sum, count) => sum + count, 0);
       const totalMortgageLoanCount = mortgageLoanCountForM + flexOfficerLoanCounts.reduce((sum, count) => sum + count, 0);
       const mortgageLoanCountShareToM = totalMortgageLoanCount ? (mortgageLoanCountForM / totalMortgageLoanCount) : 1;
@@ -195,8 +261,10 @@
         && (
           flexAmountPass
         );
-      const adjustedConsumerPass = !hasConsumerLane || consumerPass;
-      const adjustedMortgageLanePass = !hasMortgageLane || mortgageLanePass;
+      const consumerLaneTouchedThisRun = currentRunHasConsumerLoans !== false;
+      const mortgageLaneTouchedThisRun = currentRunHasMortgageLoans !== false;
+      const adjustedConsumerPass = !hasConsumerLane || !consumerLaneTouchedThisRun || consumerPass;
+      const adjustedMortgageLanePass = !hasMortgageLane || !mortgageLaneTouchedThisRun || mortgageLanePass;
       const helocSupportPolicyPass = mortgageRoutingPass && !flexParticipationViolation && mortgageLeadershipPreserved && flexParticipationMeaningful;
       const helocSupportPass = isHelocOnlySupportPool
         && helocSupportPolicyPass
@@ -331,11 +399,32 @@
           laneVariance: categoryMetrics.flexVariance,
           contextLabel: 'Flex support monitoring'
         });
+      } else if (useLowVolumeConsumerFlexParticipationFilter && hasConsumerLane) {
+        statusMetricDescriptor = this.buildLaneVarianceStatusDescriptor({
+          laneKeyPrefix: 'consumer_lane',
+          laneLabel: 'Consumer lane',
+          laneVariance: consumerSummaryVariance,
+          contextLabel: 'Consumer lane monitoring'
+        });
+      } else if (!consumerLaneTouchedThisRun && hasMortgageLane) {
+        statusMetricDescriptor = this.buildLaneVarianceStatusDescriptor({
+          laneKeyPrefix: 'mortgage_lane',
+          laneLabel: 'Mortgage lane',
+          laneVariance: categoryMetrics.mortgageVariance,
+          contextLabel: 'Mortgage lane thresholds'
+        });
+      } else if (!mortgageLaneTouchedThisRun && hasConsumerLane) {
+        statusMetricDescriptor = this.buildLaneVarianceStatusDescriptor({
+          laneKeyPrefix: 'consumer_lane',
+          laneLabel: 'Consumer lane',
+          laneVariance: consumerSummaryVariance,
+          contextLabel: 'Consumer lane thresholds'
+        });
       } else if (hasConsumerLane) {
         statusMetricDescriptor = this.buildLaneVarianceStatusDescriptor({
           laneKeyPrefix: 'consumer_lane',
           laneLabel: 'Consumer lane',
-          laneVariance: categoryMetrics.consumerVariance,
+          laneVariance: consumerSummaryVariance,
           contextLabel: 'Consumer lane thresholds'
         });
       } else if (hasFlexLane) {
@@ -358,9 +447,9 @@
         overallResult: overallAdvisory ? 'ADVISORY' : (overallPass ? 'PASS' : 'REVIEW'),
         summaryItems: [
           ...(hasConsumerLane || hasConsumerActivity ? [
-            `Consumer loan variance (consumer-eligible lane): ${categoryMetrics.consumerVariance.maxCountVariancePercent.toFixed(1)}%`,
-            `Consumer dollar variance (consumer-eligible lane): ${categoryMetrics.consumerVariance.maxAmountVariancePercent.toFixed(1)}%`,
-            this.buildLaneBreakdownText(consumerLaneEntries, 'consumerLoanCount', 'Consumer counts')
+            `Consumer loan variance (consumer-eligible lane): ${consumerSummaryVariance.maxCountVariancePercent.toFixed(1)}%`,
+            `Consumer dollar variance (consumer-eligible lane): ${consumerSummaryVariance.maxAmountVariancePercent.toFixed(1)}%`,
+            this.buildLaneBreakdownText(consumerSummaryEntries, 'consumerLoanCount', 'Consumer counts')
           ] : []),
           ...(hasMortgageLane ? [
             `Mortgage loan variance (M lane): ${categoryMetrics.mortgageVariance.maxCountVariancePercent.toFixed(1)}%`,
@@ -394,11 +483,26 @@
           ...(categoryMetrics.consumerVariance.oneLoanSpreadToleranceApplied
             ? ['Consumer lane count variance is within one-loan spread tolerance for this loan volume.']
             : []),
+          ...(categoryMetrics.consumerVariance.oneLoanTargetDeviationToleranceApplied
+            ? ['Consumer lane count variance is within one-loan target-deviation tolerance for this loan volume.']
+            : []),
+          ...(useLowVolumeConsumerFlexParticipationFilter
+            ? ['Low-volume consumer note: Flex officers without current-run consumer participation are excluded from blocking consumer-lane protection for this run, while historical consumer lane composition remains visible.']
+            : []),
           ...(categoryMetrics.mortgageVariance.oneLoanSpreadToleranceApplied
             ? ['Mortgage lane count variance is within one-loan spread tolerance for this loan volume.']
             : []),
+          ...(categoryMetrics.mortgageVariance.oneLoanTargetDeviationToleranceApplied
+            ? ['Mortgage lane count variance is within one-loan target-deviation tolerance for this loan volume.']
+            : []),
           ...(categoryMetrics.flexVariance.oneLoanSpreadToleranceApplied
             ? ['Flex lane count variance is within one-loan spread tolerance for this loan volume.']
+            : []),
+          ...(categoryMetrics.flexVariance.oneLoanTargetDeviationToleranceApplied
+            ? ['Flex lane count variance is within one-loan target-deviation tolerance for this loan volume.']
+            : []),
+          ...(useLowVolumeMortgageFlexParticipationFilter
+            ? ['Low-volume mortgage note: Flex officers without current-run mortgage participation are excluded from mortgage policy checks for this run.']
             : []),
           ...(flexMinimalParticipationInformational
             ? ['Flex lane variance is informational because current flex participation is below the minimum volume for strict review.']
@@ -446,12 +550,14 @@
             || categoryMetrics.mortgageVariance.oneLoanSpreadToleranceApplied
             || categoryMetrics.flexVariance.oneLoanSpreadToleranceApplied
           ),
+          lowVolumeConsumerFlexParticipationFilterApplied: useLowVolumeConsumerFlexParticipationFilter,
           flexMinimalParticipationToleranceApplied,
           flexMinimalParticipationInformational,
           helocWeightedMetricUnavailable,
           consumerDollarAdvisoryBandApplied: isConsumerDollarInAdvisoryBand,
           helocOnlySupportThresholdsApplied: isHelocOnlySupportPool,
           flexVarianceNonBlocking,
+          lowVolumeMortgageFlexParticipationFilterApplied: useLowVolumeMortgageFlexParticipationFilter,
           flexParticipationExpected: this.isFlexMortgageParticipationExpected({
             totalMortgageAmount,
             activeMortgageOnlyOfficerCount,

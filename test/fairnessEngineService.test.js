@@ -120,6 +120,7 @@ test('officer_lane consumer variance includes flex officers that receive consume
 test('officer_lane does not let flex-only imbalance force REVIEW when consumer and mortgage lanes pass', () => {
   const evaluation = global.FairnessEngineService.evaluateFairness({
     engineType: 'officer_lane',
+    currentRunHasConsumerLoans: false,
     officers: [
       { name: 'Ashley', eligibility: { consumer: true, mortgage: false } },
       { name: 'Peter', eligibility: { consumer: true, mortgage: true } },
@@ -180,6 +181,364 @@ test('officer_lane does not let flex-only imbalance force REVIEW when consumer a
   assert.equal(evaluation.statusMetricDescriptor?.contextLabel, 'Flex support monitoring');
   assert.equal(evaluation.roleAwareFlags?.flexVarianceNonBlocking, true);
   assert.match(evaluation.notes.join(' '), /does not independently force REVIEW/i);
+});
+
+test('officer_lane ignores flex officers with no consumer participation when evaluating consumer lane variance', () => {
+  const evaluation = global.FairnessEngineService.evaluateFairness({
+    engineType: 'officer_lane',
+    currentRunHasConsumerLoans: false,
+    officers: [
+      { name: 'ashley', eligibility: { consumer: true, mortgage: false } },
+      { name: 'jade', eligibility: { consumer: true, mortgage: true } },
+      { name: 'kash', eligibility: { consumer: true, mortgage: true } },
+      { name: 'peter', eligibility: { consumer: true, mortgage: true } }
+    ],
+    officerStats: [
+      {
+        officer: 'ashley',
+        totalLoans: 3,
+        totalAmount: 23800,
+        consumerLoanCount: 3,
+        consumerAmount: 23800,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        typeBreakdown: { Auto: 1, Personal: 2 }
+      },
+      {
+        officer: 'jade',
+        totalLoans: 5,
+        totalAmount: 137200,
+        consumerLoanCount: 3,
+        consumerAmount: 25700,
+        mortgageLoanCount: 2,
+        mortgageAmount: 111500,
+        typeBreakdown: { Personal: 1, Collateralized: 2, HELOC: 2 }
+      },
+      {
+        officer: 'kash',
+        totalLoans: 2,
+        totalAmount: 90500,
+        consumerLoanCount: 0,
+        consumerAmount: 0,
+        mortgageLoanCount: 2,
+        mortgageAmount: 90500,
+        typeBreakdown: { HELOC: 2 }
+      },
+      {
+        officer: 'peter',
+        totalLoans: 4,
+        totalAmount: 117000,
+        consumerLoanCount: 2,
+        consumerAmount: 47333.33,
+        mortgageLoanCount: 2,
+        mortgageAmount: 69666.67,
+        typeBreakdown: { 'Credit Card': 1, Personal: 1, HELOC: 2 }
+      }
+    ]
+  });
+
+  assert.equal(evaluation.metrics.consumerVariance.maxCountVariancePercent, 12.5);
+  assert.equal(Number(evaluation.metrics.consumerVariance.maxAmountVariancePercent.toFixed(1)), 24.3);
+  assert.equal(evaluation.overallResult, 'ADVISORY');
+  assert.ok(
+    ['flex_lane_count_variance', 'flex_lane_dollar_variance'].includes(evaluation.statusMetricDescriptor?.key),
+    `Expected flex variance descriptor, got ${evaluation.statusMetricDescriptor?.key}`
+  );
+});
+
+test('officer_lane ignores mortgage-lane review pressure during consumer-only runs', () => {
+  const evaluation = global.FairnessEngineService.evaluateFairness({
+    engineType: 'officer_lane',
+    currentRunHasConsumerLoans: true,
+    currentRunHasMortgageLoans: false,
+    officers: [
+      { name: 'ashley', eligibility: { consumer: true, mortgage: false } },
+      { name: 'jade', eligibility: { consumer: true, mortgage: true } },
+      { name: 'kash', eligibility: { consumer: false, mortgage: true } },
+      { name: 'peter', eligibility: { consumer: false, mortgage: true } }
+    ],
+    officerStats: [
+      {
+        officer: 'ashley',
+        totalLoans: 3,
+        totalAmount: 24000,
+        consumerLoanCount: 3,
+        consumerAmount: 24000,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        typeBreakdown: { Auto: 2, Personal: 1 }
+      },
+      {
+        officer: 'jade',
+        totalLoans: 3,
+        totalAmount: 26000,
+        consumerLoanCount: 3,
+        consumerAmount: 26000,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        typeBreakdown: { Collateralized: 1, Personal: 2 }
+      },
+      {
+        officer: 'kash',
+        totalLoans: 4,
+        totalAmount: 420000,
+        consumerLoanCount: 0,
+        consumerAmount: 0,
+        mortgageLoanCount: 4,
+        mortgageAmount: 420000,
+        typeBreakdown: { 'First Mortgage': 4 }
+      },
+      {
+        officer: 'peter',
+        totalLoans: 1,
+        totalAmount: 90000,
+        consumerLoanCount: 0,
+        consumerAmount: 0,
+        mortgageLoanCount: 1,
+        mortgageAmount: 90000,
+        typeBreakdown: { HELOC: 1 }
+      }
+    ]
+  });
+
+  assert.equal(evaluation.metrics.consumerVariance.maxCountVariancePercent <= 15, true);
+  assert.equal(evaluation.metrics.consumerVariance.maxAmountVariancePercent <= 20, true);
+  assert.equal(evaluation.metrics.mortgageVariance.maxCountVariancePercent, 0);
+  assert.equal(evaluation.metrics.mortgageVariance.maxAmountVariancePercent, 0);
+  assert.equal(evaluation.overallResult, 'PASS');
+  assert.notEqual(evaluation.statusMetricDescriptor?.key, 'mortgage_lane_dollar_variance');
+});
+
+test('officer_lane skips mortgage policy checks during consumer-only runs even with flex-heavy mortgage history', () => {
+  const evaluation = global.FairnessEngineService.evaluateFairness({
+    engineType: 'officer_lane',
+    currentRunHasConsumerLoans: true,
+    currentRunHasMortgageLoans: false,
+    officers: [
+      { name: 'ashley', eligibility: { consumer: true, mortgage: false } },
+      { name: 'jade', eligibility: { consumer: true, mortgage: true } },
+      { name: 'kash', eligibility: { consumer: false, mortgage: true } }
+    ],
+    officerStats: [
+      {
+        officer: 'ashley',
+        totalLoans: 2,
+        totalAmount: 18000,
+        consumerLoanCount: 2,
+        consumerAmount: 18000,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        typeBreakdown: { Auto: 1, Personal: 1 }
+      },
+      {
+        officer: 'jade',
+        totalLoans: 6,
+        totalAmount: 296000,
+        consumerLoanCount: 2,
+        consumerAmount: 20000,
+        mortgageLoanCount: 4,
+        mortgageAmount: 276000,
+        typeBreakdown: { Personal: 2, HELOC: 4 }
+      },
+      {
+        officer: 'kash',
+        totalLoans: 1,
+        totalAmount: 80000,
+        consumerLoanCount: 0,
+        consumerAmount: 0,
+        mortgageLoanCount: 1,
+        mortgageAmount: 80000,
+        typeBreakdown: { 'First Mortgage': 1 }
+      }
+    ]
+  });
+
+  assert.equal(evaluation.metrics.consumerVariance.maxCountVariancePercent <= 15, true);
+  assert.equal(evaluation.metrics.consumerVariance.maxAmountVariancePercent <= 20, true);
+  assert.equal(evaluation.metrics.mortgageVariance.maxCountVariancePercent, 0);
+  assert.equal(evaluation.metrics.mortgageVariance.maxAmountVariancePercent, 0);
+  assert.equal(evaluation.overallResult, 'PASS');
+  assert.notEqual(evaluation.statusMetricDescriptor?.key, 'mortgage_routing_policy');
+  assert.notEqual(evaluation.statusMetricDescriptor?.key, 'mortgage_leadership_policy');
+  assert.notEqual(evaluation.statusMetricDescriptor?.key, 'mortgage_flex_participation_policy');
+});
+
+test('officer_lane ignores consumer-lane review pressure during mortgage-only runs', () => {
+  const evaluation = global.FairnessEngineService.evaluateFairness({
+    engineType: 'officer_lane',
+    currentRunHasConsumerLoans: false,
+    currentRunHasMortgageLoans: true,
+    officers: [
+      { name: 'ashley', eligibility: { consumer: true, mortgage: false } },
+      { name: 'jade', eligibility: { consumer: true, mortgage: true } },
+      { name: 'kash', eligibility: { consumer: false, mortgage: true } },
+      { name: 'peter', eligibility: { consumer: true, mortgage: true } }
+    ],
+    officerStats: [
+      {
+        officer: 'ashley',
+        totalLoans: 3,
+        totalAmount: 35900,
+        consumerLoanCount: 3,
+        consumerAmount: 35900,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        typeBreakdown: { Personal: 2, Auto: 1 }
+      },
+      {
+        officer: 'jade',
+        totalLoans: 3,
+        totalAmount: 13600,
+        consumerLoanCount: 3,
+        consumerAmount: 13600,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        typeBreakdown: { Personal: 3 }
+      },
+      {
+        officer: 'kash',
+        totalLoans: 2,
+        totalAmount: 622500,
+        consumerLoanCount: 0,
+        consumerAmount: 0,
+        mortgageLoanCount: 2,
+        mortgageAmount: 622500,
+        typeBreakdown: { 'First Mortgage': 1, 'Home Refi': 1 }
+      },
+      {
+        officer: 'peter',
+        totalLoans: 2,
+        totalAmount: 71000,
+        consumerLoanCount: 2,
+        consumerAmount: 71000,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        typeBreakdown: { Collateralized: 1, Personal: 1 }
+      }
+    ]
+  });
+
+  assert.equal(Number(evaluation.metrics.consumerVariance.maxAmountVariancePercent.toFixed(1)), 47.6);
+  assert.equal(evaluation.metrics.mortgageVariance.maxCountVariancePercent, 0);
+  assert.equal(evaluation.metrics.mortgageVariance.maxAmountVariancePercent, 0);
+  assert.notEqual(evaluation.overallResult, 'REVIEW');
+  assert.notEqual(evaluation.statusMetricDescriptor?.key, 'consumer_lane_dollar_variance');
+});
+
+test('officer_lane excludes flex officers without current-run mortgage participation from low-volume mortgage policy checks', () => {
+  const evaluation = global.FairnessEngineService.evaluateFairness({
+    engineType: 'officer_lane',
+    currentRunHasConsumerLoans: true,
+    currentRunHasMortgageLoans: true,
+    currentRunLaneParticipationByOfficer: {
+      ashley: { consumerLoanCount: 1, consumerAmount: 9000, mortgageLoanCount: 0, mortgageAmount: 0, totalLoans: 1, totalAmount: 9000 },
+      jade: { consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 0, mortgageAmount: 0, totalLoans: 0, totalAmount: 0 },
+      kash: { consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 1, mortgageAmount: 450000, totalLoans: 1, totalAmount: 450000 }
+    },
+    officers: [
+      { name: 'ashley', eligibility: { consumer: true, mortgage: false } },
+      { name: 'jade', eligibility: { consumer: true, mortgage: true } },
+      { name: 'kash', eligibility: { consumer: false, mortgage: true } }
+    ],
+    officerStats: [
+      {
+        officer: 'ashley',
+        totalLoans: 3,
+        totalAmount: 27000,
+        consumerLoanCount: 3,
+        consumerAmount: 27000,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        typeBreakdown: { Personal: 3 }
+      },
+      {
+        officer: 'jade',
+        totalLoans: 5,
+        totalAmount: 410000,
+        consumerLoanCount: 3,
+        consumerAmount: 30000,
+        mortgageLoanCount: 2,
+        mortgageAmount: 380000,
+        typeBreakdown: { Personal: 3, 'First Mortgage': 2 }
+      },
+      {
+        officer: 'kash',
+        totalLoans: 4,
+        totalAmount: 1560000,
+        consumerLoanCount: 0,
+        consumerAmount: 0,
+        mortgageLoanCount: 4,
+        mortgageAmount: 1560000,
+        typeBreakdown: { 'First Mortgage': 4 }
+      }
+    ]
+  });
+
+  assert.equal(evaluation.overallResult, 'PASS');
+  assert.notEqual(evaluation.statusMetricDescriptor?.key, 'mortgage_flex_participation_policy');
+  assert.equal(evaluation.roleAwareFlags?.lowVolumeMortgageFlexParticipationFilterApplied, true);
+});
+
+test('officer_lane treats one-loan deviation from average as acceptable count balance when dollar variance is the primary issue', () => {
+  const evaluation = global.FairnessEngineService.evaluateFairness({
+    engineType: 'officer_lane',
+    currentRunHasConsumerLoans: true,
+    currentRunHasMortgageLoans: true,
+    officers: [
+      { name: 'ashley', eligibility: { consumer: true, mortgage: false } },
+      { name: 'jade', eligibility: { consumer: true, mortgage: true } },
+      { name: 'peter', eligibility: { consumer: true, mortgage: true } },
+      { name: 'kash', eligibility: { consumer: false, mortgage: true } }
+    ],
+    officerStats: [
+      {
+        officer: 'ashley',
+        totalLoans: 4,
+        totalAmount: 109800,
+        consumerLoanCount: 4,
+        consumerAmount: 109800,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        typeBreakdown: { Collateralized: 4 }
+      },
+      {
+        officer: 'jade',
+        totalLoans: 4,
+        totalAmount: 194000,
+        consumerLoanCount: 2,
+        consumerAmount: 54000,
+        mortgageLoanCount: 2,
+        mortgageAmount: 140000,
+        typeBreakdown: { Personal: 2, 'First Mortgage': 1, HELOC: 1 }
+      },
+      {
+        officer: 'peter',
+        totalLoans: 5,
+        totalAmount: 131700,
+        consumerLoanCount: 3,
+        consumerAmount: 79020,
+        mortgageLoanCount: 2,
+        mortgageAmount: 52680,
+        typeBreakdown: { Collateralized: 1, Personal: 4 }
+      },
+      {
+        officer: 'kash',
+        totalLoans: 5,
+        totalAmount: 660000,
+        consumerLoanCount: 0,
+        consumerAmount: 0,
+        mortgageLoanCount: 5,
+        mortgageAmount: 660000,
+        typeBreakdown: { 'First Mortgage': 3, HELOC: 2 }
+      }
+    ]
+  });
+
+  assert.equal(evaluation.metrics.consumerVariance.maxCountVariancePercent > 15, true);
+  assert.equal(evaluation.metrics.consumerVariance.oneLoanTargetDeviationToleranceApplied, true);
+  assert.equal(evaluation.metrics.consumerVariance.countDistributionPass, true);
+  assert.equal(Number(evaluation.metrics.consumerVariance.maxAmountVariancePercent.toFixed(1)), 23.0);
+  assert.equal(evaluation.statusMetricDescriptor?.key, 'mortgage_flex_participation_policy');
 });
 
 test('homogeneous HELOC support pool can PASS with specialized thresholds and weighted optimization target', () => {
@@ -370,4 +729,70 @@ test('mortgage leadership descriptor value uses mortgage loan-count share, not m
   assert.equal(evaluation.statusMetricDescriptor?.key, 'mortgage_leadership_policy');
   assert.equal(evaluation.statusMetricDescriptor?.valuePercent, expectedCountSharePercent);
   assert.notEqual(evaluation.statusMetricDescriptor?.valuePercent, mortgageRoutingSharePercent);
+});
+
+test('officer_lane excludes flex officers without current-run consumer participation in mixed runs', () => {
+  const evaluation = global.FairnessEngineService.evaluateFairness({
+    engineType: 'officer_lane',
+    currentRunHasConsumerLoans: true,
+    currentRunHasMortgageLoans: true,
+    currentRunLaneParticipationByOfficer: {
+      ashley: { consumerLoanCount: 1, consumerAmount: 86000, mortgageLoanCount: 0, mortgageAmount: 0, totalLoans: 1, totalAmount: 86000 },
+      jade: { consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 0, mortgageAmount: 0, totalLoans: 0, totalAmount: 0 },
+      peter: { consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 2, mortgageAmount: 115000, totalLoans: 2, totalAmount: 115000 },
+      kash: { consumerLoanCount: 0, consumerAmount: 0, mortgageLoanCount: 1, mortgageAmount: 450500, totalLoans: 1, totalAmount: 450500 }
+    },
+    officers: [
+      { name: 'ashley', eligibility: { consumer: true, mortgage: false } },
+      { name: 'jade', eligibility: { consumer: true, mortgage: true } },
+      { name: 'peter', eligibility: { consumer: true, mortgage: true } },
+      { name: 'kash', eligibility: { consumer: false, mortgage: true } }
+    ],
+    officerStats: [
+      {
+        officer: 'ashley',
+        totalLoans: 4,
+        totalAmount: 109800,
+        consumerLoanCount: 4,
+        consumerAmount: 109800,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        typeBreakdown: { Collateralized: 4 }
+      },
+      {
+        officer: 'jade',
+        totalLoans: 4,
+        totalAmount: 194000,
+        consumerLoanCount: 2,
+        consumerAmount: 54000,
+        mortgageLoanCount: 2,
+        mortgageAmount: 140000,
+        typeBreakdown: { Personal: 2, 'First Mortgage': 1, HELOC: 1 }
+      },
+      {
+        officer: 'peter',
+        totalLoans: 7,
+        totalAmount: 246700,
+        consumerLoanCount: 5,
+        consumerAmount: 131700,
+        mortgageLoanCount: 2,
+        mortgageAmount: 115000,
+        typeBreakdown: { Collateralized: 1, Personal: 4, HELOC: 2 }
+      },
+      {
+        officer: 'kash',
+        totalLoans: 6,
+        totalAmount: 1110500,
+        consumerLoanCount: 0,
+        consumerAmount: 0,
+        mortgageLoanCount: 6,
+        mortgageAmount: 1110500,
+        typeBreakdown: { 'First Mortgage': 4, HELOC: 2 }
+      }
+    ]
+  });
+
+  assert.equal(evaluation.metrics.consumerVariance.maxCountVariancePercent, 0);
+  assert.equal(evaluation.metrics.consumerVariance.maxAmountVariancePercent, 0);
+  assert.equal(evaluation.statusMetricDescriptor?.key, 'mortgage_flex_participation_policy');
 });

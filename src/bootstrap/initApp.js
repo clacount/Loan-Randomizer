@@ -160,9 +160,7 @@ function shouldShowDemoControls() {
 
 const HEADER_LOGO_PATH = '../branding/custom_branding.png';
 const APP_BRANDING_LOGO_PATHS = [
-  '../branding/LendFair_Branding.png',
-  '../branding/LendingFair_Branding.png',
-  '../branding/lendfair_branding.png'
+  '../branding/LendingFair_Branding.png'
 ];
 
 const logoEl = document.getElementById('logo');
@@ -485,19 +483,199 @@ function getOfficerStatsFromResult(result) {
 }
 
 
+function resultHasConsumerLoans(result) {
+  if (Array.isArray(result?.loanAssignments) && result.loanAssignments.length) {
+    return result.loanAssignments.some((entry) => getLoanCategoryForType(entry?.loan?.type) !== loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE);
+  }
+
+  const officerAssignments = result?.officerAssignments || {};
+  return Object.values(officerAssignments).some((assignedLoans) => Array.isArray(assignedLoans)
+    && assignedLoans.some((loan) => getLoanCategoryForType(loan?.type) !== loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE));
+}
+
+function resultHasMortgageLoans(result) {
+  if (Array.isArray(result?.loanAssignments) && result.loanAssignments.length) {
+    return result.loanAssignments.some((entry) => getLoanCategoryForType(entry?.loan?.type) === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE);
+  }
+
+  const officerAssignments = result?.officerAssignments || {};
+  return Object.values(officerAssignments).some((assignedLoans) => Array.isArray(assignedLoans)
+    && assignedLoans.some((loan) => getLoanCategoryForType(loan?.type) === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE));
+}
+
+function getCurrentRunLaneParticipationByOfficer(result) {
+  const participationByOfficer = {};
+  const officerAssignments = result?.officerAssignments || {};
+
+  Object.entries(officerAssignments).forEach(([officer, assignedLoans]) => {
+    const laneParticipation = {
+      consumerLoanCount: 0,
+      consumerAmount: 0,
+      mortgageLoanCount: 0,
+      mortgageAmount: 0,
+      totalLoans: 0,
+      totalAmount: 0
+    };
+
+    (Array.isArray(assignedLoans) ? assignedLoans : []).forEach((loan) => {
+      const goalAmount = getGoalAmountForLoan(loan);
+      laneParticipation.totalLoans += 1;
+      laneParticipation.totalAmount += goalAmount;
+
+      if (getLoanCategoryForType(loan?.type) === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE) {
+        laneParticipation.mortgageLoanCount += 1;
+        laneParticipation.mortgageAmount += goalAmount;
+      } else {
+        laneParticipation.consumerLoanCount += 1;
+        laneParticipation.consumerAmount += goalAmount;
+      }
+    });
+
+    participationByOfficer[officer] = laneParticipation;
+  });
+
+  return participationByOfficer;
+}
+
+function buildOfficerStatsFromRunningTotals(officers = [], runningTotalsUsed = {}) {
+  return (Array.isArray(officers) ? officers : [])
+    .map((officer) => normalizeOfficerConfig(officer))
+    .filter((officer) => officer.name)
+    .map((officer) => {
+      const priorStats = normalizeOfficerStats(runningTotalsUsed?.[officer.name]);
+      const typeBreakdown = { ...(priorStats.typeCounts || {}) };
+      let consumerLoanCount = 0;
+      let mortgageLoanCount = 0;
+
+      Object.entries(typeBreakdown).forEach(([typeName, count]) => {
+        const normalizedCount = Number(count) || 0;
+        if (getLoanCategoryForType(typeName) === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE) {
+          mortgageLoanCount += normalizedCount;
+        } else {
+          consumerLoanCount += normalizedCount;
+        }
+      });
+
+      const priorTotalAmount = Number(priorStats.totalAmountRequested) || 0;
+      const priorMortgageAmount = getEstimatedCategoryAmountTotal(
+        typeBreakdown,
+        priorTotalAmount,
+        loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE
+      );
+      const priorConsumerAmount = Math.max(0, priorTotalAmount - priorMortgageAmount);
+
+      return {
+        officer: officer.name,
+        totalLoans: priorStats.loanCount,
+        totalAmount: priorTotalAmount,
+        consumerLoanCount,
+        consumerAmount: priorConsumerAmount,
+        mortgageLoanCount,
+        mortgageAmount: priorMortgageAmount,
+        typeBreakdown
+      };
+    });
+}
+
+function maybeDowngradeImmaterialLaneReview(result, fairnessEvaluation) {
+  if (String(fairnessEvaluation?.overallResult || '').toUpperCase() !== 'REVIEW') {
+    return fairnessEvaluation;
+  }
+
+  const descriptorKey = String(fairnessEvaluation?.statusMetricDescriptor?.key || '').trim().toLowerCase();
+  const lane = descriptorKey === 'consumer_lane_dollar_variance'
+    ? 'consumer'
+    : (descriptorKey === 'mortgage_lane_dollar_variance' ? 'mortgage' : null);
+  if (!lane) {
+    return fairnessEvaluation;
+  }
+
+  const currentRunLaneParticipationByOfficer = getCurrentRunLaneParticipationByOfficer(result);
+  const laneLoanCount = Object.values(currentRunLaneParticipationByOfficer).reduce((sum, participation) => (
+    sum + (Number(lane === 'consumer' ? participation.consumerLoanCount : participation.mortgageLoanCount) || 0)
+  ), 0);
+  const laneAmount = Object.values(currentRunLaneParticipationByOfficer).reduce((sum, participation) => (
+    sum + (Number(lane === 'consumer' ? participation.consumerAmount : participation.mortgageAmount) || 0)
+  ), 0);
+
+  if (laneLoanCount !== 1 || laneAmount <= 0) {
+    return fairnessEvaluation;
+  }
+
+  const priorOfficerStats = buildOfficerStatsFromRunningTotals(result.officersUsed || [], result.runningTotalsUsed || {});
+  const priorLaneTotalAmount = priorOfficerStats.reduce((sum, entry) => (
+    sum + Number(lane === 'consumer' ? entry.consumerAmount : entry.mortgageAmount)
+  ), 0);
+  if (!(priorLaneTotalAmount > 0)) {
+    return fairnessEvaluation;
+  }
+
+  const impactShare = laneAmount / priorLaneTotalAmount;
+  if (impactShare > 0.1) {
+    return fairnessEvaluation;
+  }
+
+  const priorFairnessEvaluation = fairnessEngineService.evaluateFairness({
+    engineType: getSelectedFairnessEngine(),
+    officers: result.officersUsed || [],
+    officerStats: priorOfficerStats,
+    optimizationMetrics: {},
+    currentRunHasConsumerLoans: false,
+    currentRunHasMortgageLoans: false,
+    currentRunLaneParticipationByOfficer: {}
+  });
+
+  const metricKey = lane === 'consumer' ? 'consumerVariance' : 'mortgageVariance';
+  const currentLaneVariance = Number(fairnessEvaluation?.metrics?.[metricKey]?.maxAmountVariancePercent);
+  const priorLaneVariance = Number(priorFairnessEvaluation?.metrics?.[metricKey]?.maxAmountVariancePercent);
+  if (!Number.isFinite(currentLaneVariance) || !Number.isFinite(priorLaneVariance)) {
+    return fairnessEvaluation;
+  }
+  if (priorLaneVariance <= 25 || currentLaneVariance > (priorLaneVariance + 0.25)) {
+    return fairnessEvaluation;
+  }
+
+  const notes = Array.isArray(fairnessEvaluation.notes) ? fairnessEvaluation.notes : [];
+  const summaryItems = Array.isArray(fairnessEvaluation.summaryItems) ? fairnessEvaluation.summaryItems : [];
+  const advisoryNote = `Advisory note: Current ${lane} run volume is too small to materially resolve prior ${lane} imbalance; treat this as monitoring instead of REVIEW.`;
+  const advisorySummary = `Low-volume ${lane} impact advisory: ${formatCurrency(laneAmount)} across ${laneLoanCount} loan could not materially improve prior ${lane} variance.`;
+
+  return {
+    ...fairnessEvaluation,
+    overallResult: 'ADVISORY',
+    notes: notes.includes(advisoryNote) ? notes : [...notes, advisoryNote],
+    summaryItems: summaryItems.includes(advisorySummary) ? summaryItems : [...summaryItems, advisorySummary],
+    roleAwareFlags: {
+      ...(fairnessEvaluation.roleAwareFlags || {}),
+      immaterialLaneImpactAdvisoryApplied: true,
+      immaterialLaneImpactLane: lane
+    }
+  };
+}
+
 function evaluateResultFairness(result) {
   const officers = result.officersUsed || [];
   const officerStats = getOfficerStatsFromResult(result);
+  const currentRunHasConsumerLoans = resultHasConsumerLoans(result);
+  const currentRunHasMortgageLoans = resultHasMortgageLoans(result);
+  const currentRunLaneParticipationByOfficer = getCurrentRunLaneParticipationByOfficer(result);
   const parsedHelocWeightedVariancePercent = Number(result?.optimizationFinalHelocWeightedVariancePercent);
   const optimizationMetrics = Number.isFinite(parsedHelocWeightedVariancePercent)
     ? { helocWeightedVariancePercent: parsedHelocWeightedVariancePercent }
     : {};
-  return fairnessEngineService.evaluateFairness({
+  const baseFairnessEvaluation = fairnessEngineService.evaluateFairness({
     engineType: getSelectedFairnessEngine(),
     officers,
     officerStats,
-    optimizationMetrics
+    optimizationMetrics,
+    currentRunHasConsumerLoans,
+    currentRunHasMortgageLoans,
+    currentRunLaneParticipationByOfficer
   });
+  return maybeDowngradeImmaterialLaneReview(
+    result,
+    applyOptimizationSummaryToFairnessEvaluation(result, baseFairnessEvaluation)
+  );
 }
 
 function createOptimizationFairnessEvaluator({
@@ -516,6 +694,8 @@ function createOptimizationFairnessEvaluator({
     amount: getGoalAmountForLoan(loan),
     category: getLoanCategoryForType(loan.type)
   }));
+  const currentRunHasConsumerLoans = loanEntries.some((entry) => entry.category !== loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE);
+  const currentRunHasMortgageLoans = loanEntries.some((entry) => entry.category === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE);
 
   const baseOfficerStats = normalizedOfficerNames.map((officerName) => {
     const priorStats = normalizeOfficerStats(normalizedRunningTotals[officerName]);
@@ -558,6 +738,16 @@ function createOptimizationFairnessEvaluator({
       ...entry,
       typeBreakdown: { ...entry.typeBreakdown }
     }));
+    const currentRunLaneParticipationByOfficer = Object.fromEntries(
+      normalizedOfficerNames.map((officerName) => [officerName, {
+        consumerLoanCount: 0,
+        consumerAmount: 0,
+        mortgageLoanCount: 0,
+        mortgageAmount: 0,
+        totalLoans: 0,
+        totalAmount: 0
+      }])
+    );
 
     loanEntries.forEach(({ loan, amount, category }) => {
       const officerName = String(loanToOfficerMap.get(loan) || '').trim();
@@ -567,16 +757,23 @@ function createOptimizationFairnessEvaluator({
       }
 
       const officerEntry = officerStats[officerIndex];
+      const currentRunParticipation = currentRunLaneParticipationByOfficer[officerName];
       officerEntry.totalLoans += 1;
       officerEntry.totalAmount += amount;
       officerEntry.typeBreakdown[loan.type] = (officerEntry.typeBreakdown[loan.type] || 0) + 1;
+      currentRunParticipation.totalLoans += 1;
+      currentRunParticipation.totalAmount += amount;
 
       if (category === loanCategoryUtils.LOAN_CATEGORIES.MORTGAGE) {
         officerEntry.mortgageLoanCount += 1;
         officerEntry.mortgageAmount += amount;
+        currentRunParticipation.mortgageLoanCount += 1;
+        currentRunParticipation.mortgageAmount += amount;
       } else {
         officerEntry.consumerLoanCount += 1;
         officerEntry.consumerAmount += amount;
+        currentRunParticipation.consumerLoanCount += 1;
+        currentRunParticipation.consumerAmount += amount;
       }
     });
 
@@ -588,13 +785,22 @@ function createOptimizationFairnessEvaluator({
       engineType,
       officers: officerConfigs,
       officerStats,
-      optimizationMetrics
+      optimizationMetrics,
+      currentRunHasConsumerLoans,
+      currentRunHasMortgageLoans,
+      currentRunLaneParticipationByOfficer
     });
   };
 }
 
 function applyOptimizationSummaryToFairnessEvaluation(result, fairnessEvaluation) {
   if (!result?.optimizationApplied || !result?.optimizationSummaryMessage) {
+    return fairnessEvaluation;
+  }
+
+  const optimizationTargetDescriptorKey = String(result?.optimizationTargetDescriptorKey || '').trim();
+  const currentDescriptorKey = String(fairnessEvaluation?.statusMetricDescriptor?.key || '').trim();
+  if (optimizationTargetDescriptorKey && currentDescriptorKey && optimizationTargetDescriptorKey !== currentDescriptorKey) {
     return fairnessEvaluation;
   }
 
@@ -1312,6 +1518,10 @@ function getTodayKey() {
 
 async function getImageDataUrl(imagePath) {
   if (!imagePath) {
+    return null;
+  }
+
+  if (window.location?.protocol === 'file:') {
     return null;
   }
 
@@ -3106,8 +3316,85 @@ function getMortgageDollarAfterRunDistribution(result, officers, runningTotals) 
   });
 }
 
-function getOfficerLaneMortgageChartDistribution(distribution) {
-  return (distribution || []).filter((entry) => (Number(entry.totalAmountRequested) || 0) > 0);
+function getOfficerLaneMortgageChartDistribution(
+  distribution,
+  officers,
+  currentRunHasMortgageLoans = true,
+  currentRunLaneParticipationByOfficer = {}
+) {
+  const resolveOfficerClassCode = (officer) => {
+    if (window.FairnessEngineService?.getOfficerClassCode) {
+      return window.FairnessEngineService.getOfficerClassCode(officer);
+    }
+
+    const eligibility = normalizeOfficerConfig(officer).eligibility;
+    const consumerEligible = Boolean(eligibility?.consumer);
+    const mortgageEligible = Boolean(eligibility?.mortgage);
+    if (consumerEligible && mortgageEligible) {
+      return 'F';
+    }
+    if (consumerEligible) {
+      return 'C';
+    }
+    if (mortgageEligible) {
+      return 'M';
+    }
+    return null;
+  };
+  const officerClassMap = Object.fromEntries(
+    (officers || []).map((officer) => [normalizeOfficerConfig(officer).name, resolveOfficerClassCode(officer)])
+  );
+  return (distribution || []).filter((entry) => {
+    if ((Number(entry.totalAmountRequested) || 0) <= 0) {
+      return false;
+    }
+
+    const officerClassCode = officerClassMap[entry.officer];
+    if (officerClassCode === 'F') {
+      return currentRunHasMortgageLoans;
+    }
+
+    return officerClassCode === 'M';
+  });
+}
+
+function getOfficerLaneConsumerChartDistribution(
+  distribution,
+  officers,
+  currentRunHasConsumerLoans = true,
+  currentRunLaneParticipationByOfficer = {}
+) {
+  const resolveOfficerClassCode = (officer) => {
+    if (window.FairnessEngineService?.getOfficerClassCode) {
+      return window.FairnessEngineService.getOfficerClassCode(officer);
+    }
+
+    const eligibility = normalizeOfficerConfig(officer).eligibility;
+    const consumerEligible = Boolean(eligibility?.consumer);
+    const mortgageEligible = Boolean(eligibility?.mortgage);
+    if (consumerEligible && mortgageEligible) {
+      return 'F';
+    }
+    if (consumerEligible) {
+      return 'C';
+    }
+    if (mortgageEligible) {
+      return 'M';
+    }
+    return null;
+  };
+  const officerClassMap = Object.fromEntries(
+    (officers || []).map((officer) => [normalizeOfficerConfig(officer).name, resolveOfficerClassCode(officer)])
+  );
+  return (distribution || []).filter((entry) => {
+    const officerClassCode = officerClassMap[entry.officer];
+    if (officerClassCode === 'F') {
+      return currentRunHasConsumerLoans
+        ? true
+        : (Number(entry.totalAmountRequested) || 0) > 0;
+    }
+    return officerClassCode === 'C';
+  });
 }
 
 function getChartSegments(distribution, field) {
@@ -3392,25 +3679,42 @@ function renderDistributionCharts(result, officers, runningTotals) {
     result.fairnessEvaluation || evaluateResultFairness(result)
   );
   const selectedEngine = getSelectedFairnessEngine();
+  const currentRunHasConsumerLoans = resultHasConsumerLoans(result);
+  const currentRunHasMortgageLoans = resultHasMortgageLoans(result);
+  const currentRunLaneParticipationByOfficer = getCurrentRunLaneParticipationByOfficer(result);
 
   const dollarBeforeDistribution = selectedEngine === 'officer_lane'
-    ? getOfficerLaneMortgageChartDistribution(mortgageDollarBeforeDistribution)
+    ? getOfficerLaneMortgageChartDistribution(
+        mortgageDollarBeforeDistribution,
+        officers,
+        currentRunHasMortgageLoans,
+        currentRunLaneParticipationByOfficer
+      )
     : beforeDistribution;
   const dollarAfterDistribution = selectedEngine === 'officer_lane'
-    ? getOfficerLaneMortgageChartDistribution(mortgageDollarAfterDistribution)
+    ? getOfficerLaneMortgageChartDistribution(
+        mortgageDollarAfterDistribution,
+        officers,
+        currentRunHasMortgageLoans,
+        currentRunLaneParticipationByOfficer
+      )
     : afterDistribution;
 
-  const consumerEligibleOfficerNames = new Set(
-    officers
-      .map(normalizeOfficerConfig)
-      .filter((officer) => loanCategoryUtils.normalizeOfficerEligibility(officer.eligibility).consumer)
-      .map((officer) => officer.name)
-  );
   const consumerDollarBeforeLaneDistribution = selectedEngine === 'officer_lane'
-    ? consumerDollarBeforeDistribution.filter((entry) => consumerEligibleOfficerNames.has(entry.officer))
+    ? getOfficerLaneConsumerChartDistribution(
+        consumerDollarBeforeDistribution,
+        officers,
+        currentRunHasConsumerLoans,
+        currentRunLaneParticipationByOfficer
+      )
     : consumerDollarBeforeDistribution;
   const consumerDollarAfterLaneDistribution = selectedEngine === 'officer_lane'
-    ? consumerDollarAfterDistribution.filter((entry) => consumerEligibleOfficerNames.has(entry.officer))
+    ? getOfficerLaneConsumerChartDistribution(
+        consumerDollarAfterDistribution,
+        officers,
+        currentRunHasConsumerLoans,
+        currentRunLaneParticipationByOfficer
+      )
     : consumerDollarAfterDistribution;
 
   const chartConfigs = [
@@ -3479,10 +3783,18 @@ function renderDistributionCharts(result, officers, runningTotals) {
     const chartCard = document.createElement('div');
     chartCard.className = 'distribution-chart-card';
 
-      const chartRenderer = window.DistributionChartRenderer;
-    const { canvas, imageDataUrl } = chartRenderer?.drawDonutChart
-      ? chartRenderer.drawDonutChart(config)
-      : drawDonutChart(config);
+    const chartRenderer = window.DistributionChartRenderer;
+    let renderedChart = null;
+
+    if (chartRenderer?.drawDonutChart) {
+      try {
+        renderedChart = chartRenderer.drawDonutChart(config);
+      } catch (error) {
+        console.warn('DistributionChartRenderer failed; falling back to inline renderer.', error);
+      }
+    }
+
+    const { canvas, imageDataUrl } = renderedChart || drawDonutChart(config);
     chartImages.push({
       title: config.title,
       imageDataUrl
@@ -5390,6 +5702,27 @@ function getConsumerDollarGuardrailSettings() {
   };
 }
 
+function isSegmentedConsumerLaneForScoring(officersByName, eligibleOfficerNames = []) {
+  if (getSelectedFairnessEngineForScoring() !== 'officer_lane' || eligibleOfficerNames.length < 2) {
+    return false;
+  }
+
+  let hasConsumerOnlyOfficer = false;
+  let hasFlexOfficer = false;
+
+  eligibleOfficerNames.forEach((officerName) => {
+    const eligibility = loanCategoryUtils.normalizeOfficerEligibility(officersByName?.[officerName]?.eligibility);
+    if (eligibility.consumer && !eligibility.mortgage) {
+      hasConsumerOnlyOfficer = true;
+    }
+    if (eligibility.consumer && eligibility.mortgage) {
+      hasFlexOfficer = true;
+    }
+  });
+
+  return hasConsumerOnlyOfficer && hasFlexOfficer;
+}
+
 function getRoleShareWeightForConsumerScoring(officerConfig, hasMortgageOnlyOfficer) {
   const eligibility = loanCategoryUtils.normalizeOfficerEligibility(officerConfig?.eligibility);
   const isConsumerOnly = eligibility.consumer && !eligibility.mortgage;
@@ -5862,6 +6195,8 @@ function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCoun
   );
 
   const scoredOfficers = shuffledOfficers.map((officer) => {
+    const segmentedConsumerLane = loanCategory === loanCategoryUtils.LOAN_CATEGORIES.CONSUMER
+      && isSegmentedConsumerLaneForScoring(officersByName, eligibleOfficerNames);
     const currentTypeTotals = Object.fromEntries(
       eligibleOfficerNames.map((currentOfficer) => [currentOfficer, officerTypeCounts[currentOfficer][loan.type] || 0])
     );
@@ -5906,7 +6241,11 @@ function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCoun
       ? getConsumerLaneCountBalancingPenalty(eligibleOfficerNames, categoryLoanTotals, officer)
       : 0;
     const consumerLaneUnevennessGuardPenalty = loanCategory === loanCategoryUtils.LOAN_CATEGORIES.CONSUMER
-      ? getConsumerLaneUnevennessGuardPenalty(eligibleOfficerNames, categoryLoanTotals, officerActiveSessions, officer)
+      ? (
+        segmentedConsumerLane
+          ? 0
+          : getConsumerLaneUnevennessGuardPenalty(eligibleOfficerNames, categoryLoanTotals, officerActiveSessions, officer)
+      )
       : 0;
     const helocCompetitionPenalty = mortgagePermissionLevel === 'heloc'
       ? getHelocLaneCompetitionPenalty(officersByName, eligibleOfficerNames, officerTypeCounts, officerActiveSessions, officer, loan.type)
@@ -5919,7 +6258,21 @@ function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCoun
     const runAssignmentCount = Number(runAssignmentCounts?.[officer] || 0);
     const runConcentrationPenalty = (getSelectedFairnessEngineForScoring() === 'officer_lane' ? 0.08 : 0.35) * (runAssignmentCount ** 2);
     const globalRunDominationPenalty = getGlobalRunDominationPenalty(eligibleOfficerNames, runAssignmentCounts, officer);
+    const typeWeightMultiplier = segmentedConsumerLane ? 0.5 : 4;
     const fairnessScore = (typeVariance * 4)
+      + (amountVariance * amountWeightMultiplier)
+      + (loanVariance * loanWeightMultiplier)
+      + distinctTypePenalty
+      + currentAmountPenalty
+      + consumerDollarDriftPenalty
+      + consumerRoleSharePenalty
+      + consumerLaneCountBalancingPenalty
+      + consumerLaneUnevennessGuardPenalty
+      + helocCompetitionPenalty
+      + homogeneousHelocPenalty
+      + runConcentrationPenalty
+      + globalRunDominationPenalty;
+    const weightedFairnessScore = (typeVariance * typeWeightMultiplier)
       + (amountVariance * amountWeightMultiplier)
       + (loanVariance * loanWeightMultiplier)
       + distinctTypePenalty
@@ -5939,12 +6292,12 @@ function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCoun
       eligibleOfficers,
       mortgagePermissionLevel
     );
-    const score = fairnessScore / (getCategoryWeightBias(categoryWeight) * participationBias);
+    const score = weightedFairnessScore / (getCategoryWeightBias(categoryWeight) * participationBias);
 
     return {
       officer,
       score,
-      fairnessScore,
+      fairnessScore: weightedFairnessScore,
       categoryWeight,
       loanCategory,
       typeVariance,
@@ -5960,7 +6313,8 @@ function chooseOfficerForLoan(officersByName, officerLoanTotals, officerTypeCoun
       globalRunDominationPenalty,
       projectedTypeLoad: getNormalizedFairnessValue((officerTypeCounts[officer][loan.type] || 0) + 1, officerActiveSessions[officer]),
       projectedAmountLoad: getNormalizedFairnessValue(officerAmountTotals[officer] + goalAmount, officerActiveSessions[officer]),
-      projectedLoanLoad: getNormalizedFairnessValue(officerLoanTotals[officer] + 1, officerActiveSessions[officer])
+      projectedLoanLoad: getNormalizedFairnessValue(officerLoanTotals[officer] + 1, officerActiveSessions[officer]),
+      segmentedConsumerLane
     };
   });
 
@@ -6738,11 +7092,11 @@ function getGlobalCandidateConstraint(statusMetricDescriptorKey) {
 function getOfficerLaneCandidateConstraint(statusMetricDescriptorKey) {
   switch (String(statusMetricDescriptorKey || '')) {
     case 'consumer_lane_dollar_variance':
-      return (fairnessEvaluation) => Number(fairnessEvaluation?.metrics?.consumerVariance?.maxCountVariancePercent) <= 15;
+      return (fairnessEvaluation) => Boolean(fairnessEvaluation?.metrics?.consumerVariance?.countDistributionPass);
     case 'mortgage_lane_dollar_variance':
-      return (fairnessEvaluation) => Number(fairnessEvaluation?.metrics?.mortgageVariance?.maxCountVariancePercent) <= 15;
+      return (fairnessEvaluation) => Boolean(fairnessEvaluation?.metrics?.mortgageVariance?.countDistributionPass);
     case 'flex_lane_dollar_variance':
-      return (fairnessEvaluation) => Number(fairnessEvaluation?.metrics?.flexVariance?.maxCountVariancePercent) <= 15;
+      return (fairnessEvaluation) => Boolean(fairnessEvaluation?.metrics?.flexVariance?.countDistributionPass);
     default:
       return null;
   }
